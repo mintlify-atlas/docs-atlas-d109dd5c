@@ -1,0 +1,89 @@
+{
+  "projectType": "saas",
+  "projectName": "Ripper",
+  "projectDescription": "A web-based music streaming platform for Peruvian huayno music with sheet music display and catalog management.",
+  "theme": "aspen",
+  "primaryColor": "#e50914",
+  "lightColor": "#ff2432",
+  "darkColor": "#b30710",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Features",
+            "pages": [
+              "features/music-player",
+              "features/catalog-browsing",
+              "features/admin-panel",
+              "features/session-management"
+            ]
+          },
+          {
+            "group": "User Guides",
+            "pages": [
+              "guides/browsing-music",
+              "guides/player-controls",
+              "guides/keyboard-shortcuts"
+            ]
+          },
+          {
+            "group": "Admin Guides",
+            "pages": [
+              "admin/accessing-panel",
+              "admin/managing-tracks",
+              "admin/video-sources"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Technical Reference",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "technical/firebase-setup",
+              "technical/authentication",
+              "technical/database-schema"
+            ]
+          },
+          {
+            "group": "Development",
+            "pages": [
+              "technical/deployment",
+              "technical/customization"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Firebase authentication with single-device session enforcement",
+    "Music player with YouTube and Google Drive video sources",
+    "Admin panel for track management with CRUD operations",
+    "Catalog organization by tonality and musical categories",
+    "Search and filter functionality",
+    "Keyboard shortcuts for player control",
+    "Responsive Netflix-inspired UI"
+  ],
+  "publicApiSurface": [
+    "index.html - Landing page with login",
+    "home.html - Main dashboard with music categories",
+    "lista-temas.html - Browse tracks by category",
+    "reproductor.html - Music player with video and controls",
+    "admin.html - Admin panel for content management",
+    "firebase.js - Firebase configuration and initialization",
+    "js/seguridad.js - Authentication and session management"
+  ]
+}
