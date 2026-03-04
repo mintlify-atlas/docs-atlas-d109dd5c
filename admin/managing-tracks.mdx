@@ -1,0 +1,459 @@
+---
+title: "Managing Tracks"
+description: "Complete guide to adding, editing, and organizing tracks in the Ripper admin panel"
+---
+
+The admin panel provides comprehensive track management capabilities for your Peruvian huayno music catalog.
+
+## Track Data Model
+
+Each track in Ripper contains the following fields:
+
+<ParamField path="titulo" type="string" required>
+  The title of the track (e.g., "Ayer la vi a mi ex")
+</ParamField>
+
+<ParamField path="artista" type="string">
+  The artist or band name (e.g., "Banda Jazz Perú Sunicancha")
+</ParamField>
+
+<ParamField path="tonalidad" type="string">
+  Musical key of the track (e.g., "La menor", "Mi menor", "Re menor", "Sol menor")
+</ParamField>
+
+<ParamField path="videoId" type="string" required>
+  YouTube video ID or Google Drive file ID
+</ParamField>
+
+<ParamField path="inicio" type="number" default="0">
+  Start time in seconds for playback (useful when the music doesn't start at the beginning of the video)
+</ParamField>
+
+<ParamField path="categoria" type="string" default="huayno">
+  Genre category: `huayno`, `salay`, or `cumbia`
+</ParamField>
+
+<ParamField path="fuente" type="string" default="youtube">
+  Video source: `youtube` or `drive`
+</ParamField>
+
+<ParamField path="createdAt" type="timestamp">
+  Auto-generated creation timestamp (Firestore `serverTimestamp()`)
+</ParamField>
+
+## Adding New Tracks
+
+### Using the Add Form
+
+The admin panel provides a form for adding new tracks:
+
+<Steps>
+  <Step title="Fill in Track Details">
+    Enter the track information in the form fields:
+
+    ```javascript admin.html
+    function collectData() {
+        return {
+            titulo: refs.titulo.value.trim(),
+            artista: refs.artista.value.trim(),
+            tonalidad: refs.tonalidad.value.trim(),
+            videoId: refs.videoId.value.trim(),
+            inicio: parseInt(refs.inicio.value, 10) || 0,
+            categoria: refs.categoria.value,
+            fuente: refs.fuente.value
+        };
+    }
+    ```
+  </Step>
+
+  <Step title="Extract Video ID (Optional)">
+    If you paste a full URL instead of just the ID, click **"Extraer ID de URL"** or the system will auto-extract on blur:
+
+    ```javascript admin.html
+    function extractVideoId(raw, fuente) {
+        const value = (raw || "").trim();
+        if (!value) return "";
+        if (!value.includes("http")) return value;
+
+        try {
+            const url = new URL(value);
+            if (fuente === "youtube") {
+                if (url.hostname.includes("youtu.be")) 
+                    return url.pathname.replace("/", "");
+                const v = url.searchParams.get("v");
+                if (v) return v;
+                // ...
+            }
+            if (fuente === "drive") {
+                const match = value.match(/\/d\/([^/]+)/);
+                if (match && match[1]) return match[1];
+                // ...
+            }
+        } catch {}
+        return value;
+    }
+    ```
+  </Step>
+
+  <Step title="Validate and Save">
+    Click **"Guardar tema"** or press **Enter** to save:
+
+    ```javascript admin.html
+    function validateData(data) {
+        if (!data.titulo) return "El título es obligatorio.";
+        if (!data.videoId) return "El ID/URL del video es obligatorio.";
+        if (data.inicio < 0) return "El segundo de inicio no puede ser negativo.";
+        return "";
+    }
+
+    async function guardarTema() {
+        const data = collectData();
+        data.videoId = extractVideoId(data.videoId, data.fuente);
+
+        const err = validateData(data);
+        if (err) {
+            showStatus(err, false);
+            return;
+        }
+
+        const payload = { ...data, createdAt: serverTimestamp() };
+        const ref = await addDoc(collection(db, "temas"), payload);
+        allTemas.push({ _id: ref.id, ...data, createdAtMs: Date.now() });
+        showStatus("✓ Tema añadido.", true);
+        // ...
+    }
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  The form automatically extracts video IDs from URLs when you blur the input field, saving you from manual copy-paste.
+</Note>
+
+### Example: Adding a YouTube Track
+
+```javascript
+// Track data
+{
+  titulo: "Ayer la vi a mi ex",
+  artista: "Banda Jazz Perú Sunicancha",
+  tonalidad: "La menor",
+  videoId: "FTV-9T8b05I",  // Extracted from https://youtube.com/watch?v=FTV-9T8b05I
+  inicio: 29,
+  categoria: "huayno",
+  fuente: "youtube",
+  createdAt: serverTimestamp()
+}
+```
+
+### Example: Adding a Google Drive Track
+
+```javascript
+// Track data  
+{
+  titulo: "Viaje de Amor",
+  artista: "Banda Orquesta Corazón de Huandoval",
+  tonalidad: "La menor",
+  videoId: "1O55K7VysXG37LJdeyC-O96rysmQwTt_x",  // Extracted from Drive URL
+  inicio: 0,
+  categoria: "huayno",
+  fuente: "drive",
+  createdAt: serverTimestamp()
+}
+```
+
+## Editing Existing Tracks
+
+To modify a track, click the **"Editar"** button in the track table:
+
+```javascript admin.html
+window.prepEdit = (id) => {
+    const t = allTemas.find(x => x._id === id);
+    if (!t) return;
+
+    refs.editId.value = id;
+    refs.titulo.value = t.titulo || "";
+    refs.artista.value = t.artista || "";
+    refs.tonalidad.value = t.tonalidad || "";
+    refs.videoId.value = t.videoId || "";
+    refs.inicio.value = t.inicio || 0;
+    refs.categoria.value = t.categoria || "huayno";
+    refs.fuente.value = t.fuente || "youtube";
+
+    refs.formLabel.textContent = "✏️ Editando tema";
+    refs.btnGuardar.innerHTML = `
+        <svg>...</svg>
+        Actualizar cambios`;
+    refs.btnCancelar.style.display = "inline-flex";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+};
+```
+
+<Steps>
+  <Step title="Click Edit">
+    Click **"Editar"** on any track row to load its data into the form
+  </Step>
+
+  <Step title="Modify Fields">
+    Update any field values as needed
+  </Step>
+
+  <Step title="Save Changes">
+    Click **"Actualizar cambios"** or press **Enter**:
+
+    ```javascript admin.html
+    if (editId) {
+        await updateDoc(doc(db, "temas", editId), data);
+        const idx = allTemas.findIndex(t => t._id === editId);
+        if (idx > -1) allTemas[idx] = { ...allTemas[idx], ...data };
+        showStatus("✓ Tema actualizado.", true);
+    }
+    ```
+  </Step>
+
+  <Step title="Cancel (Optional)">
+    Click **"Cancelar"** or press **Esc** to exit edit mode without saving
+  </Step>
+</Steps>
+
+## Deleting Tracks
+
+To permanently remove a track:
+
+```javascript admin.html
+window.borrar = async (id) => {
+    const t = allTemas.find(x => x._id === id);
+    if (!confirm(`¿Eliminar "${t?.titulo || "tema"}"?`)) return;
+    
+    try {
+        await deleteDoc(doc(db, "temas", id));
+        allTemas = allTemas.filter(x => x._id !== id);
+        updateStats();
+        applyFiltersAndRender();
+        showStatus("✓ Eliminado.", true);
+    } catch (e) {
+        showStatus("Error al eliminar: " + e.message, false);
+    }
+};
+```
+
+<Warning>
+  Deletion is permanent and cannot be undone. A confirmation dialog will appear before deletion.
+</Warning>
+
+## Duplicating Tracks
+
+To create a copy of an existing track (useful for variations):
+
+```javascript admin.html
+window.duplicar = async (id) => {
+    const t = allTemas.find(x => x._id === id);
+    if (!t) return;
+    
+    const copia = {
+        titulo: `${t.titulo || "Tema"} (copia)`,
+        artista: t.artista || "",
+        tonalidad: t.tonalidad || "",
+        videoId: t.videoId || "",
+        inicio: t.inicio || 0,
+        categoria: t.categoria || "huayno",
+        fuente: t.fuente || "youtube",
+        createdAt: serverTimestamp()
+    };
+
+    const ref = await addDoc(collection(db, "temas"), copia);
+    allTemas.unshift({ _id: ref.id, ...copia, createdAtMs: Date.now() });
+    updateStats();
+    applyFiltersAndRender();
+    showStatus("✓ Tema duplicado.", true);
+};
+```
+
+The duplicated track will have "(copia)" appended to its title.
+
+## Filtering and Searching
+
+### Search by Text
+
+The search box filters by title, artist, or tonalidad:
+
+```javascript admin.html
+const q = normalizar(refs.search.value);
+filteredTemas = allTemas.filter(t => {
+    const matchesText = normalizar(t.titulo).includes(q)
+        || normalizar(t.artista).includes(q)
+        || normalizar(t.tonalidad).includes(q);
+    // ...
+});
+```
+
+The `normalizar()` function removes accents for better matching:
+
+```javascript admin.html
+function normalizar(texto) {
+    return (texto || "").toString().toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+}
+```
+
+### Filter by Category
+
+Filter tracks by genre category:
+- **Todas las categorías** (all)
+- **Huayno**
+- **Salay**
+- **Cumbia**
+
+```javascript admin.html
+const cat = refs.filterCategoria.value;
+const matchesCat = cat === "all" || (t.categoria || "") === cat;
+```
+
+### Filter by Source
+
+Filter tracks by video source:
+- **Todas las fuentes** (all)
+- **YouTube**
+- **Google Drive**
+
+```javascript admin.html
+const src = refs.filterFuente.value;
+const matchesSrc = src === "all" || (t.fuente || "") === src;
+```
+
+### Sorting Options
+
+Sort tracks by:
+- **Título A-Z**: Alphabetical by title (ascending)
+- **Título Z-A**: Alphabetical by title (descending)
+- **Artista A-Z**: Alphabetical by artist
+- **Más recientes**: Most recently added first
+
+```javascript admin.html
+filteredTemas.sort((a, b) => {
+    const ta = (a.titulo || "").toLowerCase();
+    const tb = (b.titulo || "").toLowerCase();
+    const aa = (a.artista || "").toLowerCase();
+    const ab = (b.artista || "").toLowerCase();
+
+    if (sortMode === "titulo-asc") return ta.localeCompare(tb);
+    if (sortMode === "titulo-desc") return tb.localeCompare(ta);
+    if (sortMode === "artista-asc") return aa.localeCompare(ab);
+    return (b.createdAtMs || 0) - (a.createdAtMs || 0);  // más recientes
+});
+```
+
+### Clear All Filters
+
+Click **"Limpiar"** to reset all filters and search:
+
+```javascript admin.html
+document.getElementById("btnResetFilters").onclick = () => {
+    refs.search.value = "";
+    refs.filterCategoria.value = "all";
+    refs.filterFuente.value = "all";
+    refs.sort.value = "titulo-asc";
+    applyFiltersAndRender();
+};
+```
+
+## Copying Track Links
+
+Generate shareable links to individual tracks:
+
+```javascript admin.html
+window.copiarLink = async (id, cat) => {
+    const url = `${location.origin}${location.pathname.replace("admin.html", "reproductor.html")}?id=${id}&cat=${cat || "huayno"}`;
+    try {
+        await navigator.clipboard.writeText(url);
+        showStatus("✓ Link copiado.", true);
+    } catch {
+        showStatus("No se pudo copiar el link.", false);
+    }
+};
+```
+
+Example generated URL:
+```
+https://ripper.com/reproductor.html?id=abc123&cat=huayno
+```
+
+## Exporting Data
+
+Export your catalog to CSV format:
+
+```javascript admin.html
+function exportCsv() {
+    const rows = filteredTemas.length ? filteredTemas : allTemas;
+    if (!rows.length) {
+        showStatus("No hay datos para exportar.", false);
+        return;
+    }
+
+    const headers = ["titulo", "artista", "tonalidad", "categoria", "fuente", "videoId", "inicio"];
+    const escapeCell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = [headers.join(",")]
+        .concat(rows.map(r => headers.map(h => escapeCell(r[h])).join(",")))
+        .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ripper-temas-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showStatus("✓ CSV exportado.", true);
+}
+```
+
+The CSV includes all visible fields and respects current filters.
+
+## Keyboard Shortcuts
+
+Optimize your workflow with keyboard shortcuts:
+
+```javascript admin.html
+document.addEventListener("keydown", (e) => {
+    const activeTag = (document.activeElement?.tagName || "").toLowerCase();
+    
+    if (e.key === "Escape") {
+        limpiar();  // Cancel edit mode
+    }
+    
+    if (e.key === "Enter" && activeTag !== "textarea" && activeTag !== "button") {
+        const isFormField = ["input", "select"].includes(activeTag);
+        if (isFormField) {
+            e.preventDefault();
+            guardarTema();  // Save track
+        }
+    }
+});
+```
+
+- **Enter**: Save track when focused on form fields
+- **Esc**: Cancel edit mode and clear form
+
+## Real-Time Updates
+
+The admin panel updates statistics in real-time:
+
+```javascript admin.html
+function updateStats() {
+    refs.statTotal.textContent = allTemas.length;
+    refs.statYt.textContent = allTemas.filter(t => t.fuente === "youtube").length;
+    refs.statDrive.textContent = allTemas.filter(t => t.fuente === "drive").length;
+    refs.statCats.textContent = new Set(allTemas.map(t => t.categoria || "sin")).size;
+}
+```
+
+The table count and last update timestamp refresh after every operation:
+
+```javascript admin.html
+function fmtNow() {
+    return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+refs.lastUpdate.textContent = `Actualizado ${fmtNow()}`;
+```

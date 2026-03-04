@@ -1,0 +1,207 @@
+---
+title: Firebase Setup
+description: Complete Firebase configuration and initialization for Ripper's backend infrastructure
+---
+
+## Overview
+
+Ripper uses Firebase as its primary backend infrastructure, providing authentication, real-time database, and offline persistence capabilities. The application leverages Firebase v10.7.1 with modular imports for optimal performance.
+
+## Firebase Configuration
+
+### Project Details
+
+The Firebase project is configured with the following credentials:
+
+```javascript firebase.js
+const firebaseConfig = {
+    apiKey: "AIzaSyBu1KKK7YJsXoHbNNUXLBhV54b1UIS8OEw",
+    authDomain: "huaynos-6e527.firebaseapp.com",
+    projectId: "huaynos-6e527",
+    storageBucket: "huaynos-6e527.firebasestorage.app",
+    messagingSenderId: "374495999469",
+    appId: "1:374495999469:web:54dc33730a53f33e2a63e4"
+};
+```
+
+<Note>
+These credentials are publicly visible in client-side code. Firebase security is enforced through Firestore security rules, not credential protection.
+</Note>
+
+## Module Imports
+
+Ripper uses Firebase's modular SDK imported directly from the CDN:
+
+```javascript firebase.js
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+```
+
+### Why CDN Imports?
+
+<CardGroup cols={2}>
+  <Card title="No Build Step" icon="rocket">
+    Direct browser execution without bundlers or compilation
+  </Card>
+  <Card title="Caching" icon="database">
+    Browser caches Firebase modules across sessions
+  </Card>
+  <Card title="Fast Updates" icon="bolt">
+    Easy version updates by changing the CDN URL
+  </Card>
+  <Card title="Simplicity" icon="code">
+    No package.json or node_modules dependencies
+  </Card>
+</CardGroup>
+
+## Service Initialization
+
+### App Initialization
+
+```javascript firebase.js
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+```
+
+The application initializes two core Firebase services:
+
+<ResponseField name="db" type="Firestore">
+  Firestore database instance for storing songs, user sessions, and metadata
+</ResponseField>
+
+<ResponseField name="auth" type="Auth">
+  Authentication service for email/password login and session management
+</ResponseField>
+
+## Offline Persistence
+
+### IndexedDB Persistence
+
+Ripper enables offline data persistence for instant loading on repeat visits:
+
+```javascript firebase.js
+enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code == 'failed-precondition') {
+        console.warn("La persistencia falló: Múltiples pestañas abiertas.");
+    } else if (err.code == 'unimplemented') {
+        console.warn("El navegador no soporta persistencia de datos.");
+    }
+});
+```
+
+### How It Works
+
+<Steps>
+  <Step title="First Visit">
+    Data is fetched from Firebase servers and cached in IndexedDB
+  </Step>
+  <Step title="Subsequent Visits">
+    Data loads instantly from local cache while Firebase syncs in background
+  </Step>
+  <Step title="Offline Access">
+    Previously loaded data remains available even without internet
+  </Step>
+  <Step title="Automatic Sync">
+    When connection returns, local changes sync with Firebase automatically
+  </Step>
+</Steps>
+
+### Error Handling
+
+<Accordion title="failed-precondition Error">
+Occurs when multiple tabs are open simultaneously. Only one tab can have persistence enabled at a time. This is a Firebase limitation, not an application error.
+
+**Impact**: Other tabs fall back to memory-only caching.
+</Accordion>
+
+<Accordion title="unimplemented Error">
+Occurs in browsers that don't support IndexedDB (rare in modern browsers). The app continues to function but without offline capabilities.
+
+**Supported Browsers**: Chrome 24+, Firefox 16+, Safari 10+, Edge 79+
+</Accordion>
+
+## Module Exports
+
+The Firebase configuration exports two services for use across the application:
+
+```javascript firebase.js
+export { auth, db };
+```
+
+### Usage in Other Modules
+
+```javascript
+import { auth, db } from "./firebase.js";
+```
+
+All pages import these shared instances to ensure consistent state across the application.
+
+## Performance Optimizations
+
+<CardGroup cols={2}>
+  <Card title="Persistent Cache" icon="gauge-high">
+    IndexedDB reduces load times by 90%+ on repeat visits
+  </Card>
+  <Card title="Modular SDK" icon="cubes">
+    Tree-shaking reduces bundle size by importing only needed functions
+  </Card>
+  <Card title="CDN Distribution" icon="server">
+    Firebase SDK loads from Google's global CDN network
+  </Card>
+  <Card title="Background Sync" icon="arrows-rotate">
+    Real-time updates happen in background without blocking UI
+  </Card>
+</CardGroup>
+
+## Security Considerations
+
+<Warning>
+Firebase API keys in client-side code are **not security vulnerabilities**. Security is enforced through:
+
+- Firestore Security Rules
+- Firebase Authentication rules
+- Domain restrictions in Firebase Console
+- Rate limiting and quota management
+</Warning>
+
+### Best Practices Implemented
+
+1. **Authentication Required**: All protected routes check auth state
+2. **Session Management**: Single-device enforcement (see [Authentication](/technical/authentication))
+3. **Data Validation**: Server-side rules validate all database writes
+4. **Error Boundaries**: Graceful fallbacks when Firebase services fail
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Firebase not loading">
+    **Cause**: CDN blocked by network or ad blocker
+    
+    **Solution**: Check browser console for network errors. Verify `gstatic.com` is not blocked.
+  </Accordion>
+  
+  <Accordion title="Persistence errors in console">
+    **Cause**: Multiple tabs open or unsupported browser
+    
+    **Solution**: Close duplicate tabs or upgrade browser. App continues to work without persistence.
+  </Accordion>
+  
+  <Accordion title="Data not syncing">
+    **Cause**: Firestore rules blocking writes or network offline
+    
+    **Solution**: Check browser network tab and Firebase Console rules. Verify authentication state.
+  </Accordion>
+</AccordionGroup>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/technical/authentication">
+    Learn about Firebase Auth implementation
+  </Card>
+  <Card title="Database Schema" icon="database" href="/technical/database-schema">
+    Explore Firestore collections and structure
+  </Card>
+</CardGroup>

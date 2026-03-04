@@ -1,0 +1,372 @@
+---
+title: Authentication
+description: Firebase Authentication implementation with single-device session enforcement
+---
+
+## Overview
+
+Ripper implements a custom authentication system built on Firebase Auth with **single-device session enforcement**. This ensures only one device can be logged in per account at any time, preventing account sharing and unauthorized access.
+
+## Authentication Flow
+
+<Steps>
+  <Step title="User Login">
+    User enters credentials on `login.html`
+  </Step>
+  <Step title="Firebase Auth">
+    `signInWithEmailAndPassword()` validates credentials
+  </Step>
+  <Step title="Session Claim">
+    `reclamarSesion()` writes device ID to Firestore, evicting other devices
+  </Step>
+  <Step title="Session Monitoring">
+    `vigilarSesion()` listens for session changes on all protected pages
+  </Step>
+  <Step title="Auto Eviction">
+    If another device claims the session, current device is logged out automatically
+  </Step>
+</Steps>
+
+## Login Implementation
+
+### Email/Password Authentication
+
+The login form uses Firebase's email/password authentication:
+
+```javascript login.html
+import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { reclamarSesion } from "./js/seguridad.js";
+
+async function doLogin() {
+    const email = document.getElementById("email").value.trim();
+    const pass = passInput.value;
+
+    if (!email || !pass) {
+        showError("Completa correo y contraseña.");
+        return;
+    }
+
+    // Set persistence based on "Remember me" checkbox
+    await setPersistence(auth, remember.checked ? browserLocalPersistence : browserSessionPersistence);
+    
+    // Sign in
+    const cred = await signInWithEmailAndPassword(auth, email, pass);
+    
+    // Claim session (evicts other devices)
+    await reclamarSesion(db, cred.user.uid);
+    
+    window.location.replace("home.html");
+}
+```
+
+### Persistence Options
+
+<CardGroup cols={2}>
+  <Card title="Local Persistence" icon="floppy-disk">
+    **browserLocalPersistence**: Session persists across browser restarts
+    
+    Used when "Remember me" is checked
+  </Card>
+  <Card title="Session Persistence" icon="clock">
+    **browserSessionPersistence**: Session cleared when tab/browser closes
+    
+    Used when "Remember me" is unchecked
+  </Card>
+</CardGroup>
+
+### Error Handling
+
+The login system maps Firebase error codes to user-friendly messages:
+
+```javascript login.html
+const authErrors = {
+    "auth/invalid-credential": "Correo o contraseña incorrectos.",
+    "auth/user-not-found": "No existe una cuenta con ese correo.",
+    "auth/wrong-password": "Correo o contraseña incorrectos.",
+    "auth/too-many-requests": "Demasiados intentos. Intenta más tarde.",
+    "auth/invalid-email": "El formato del correo no es válido."
+};
+```
+
+## Single-Device Session System
+
+### Architecture Overview
+
+<Note>
+**Critical Design Principle**: 
+- `reclamarSesion()` is called **ONLY** during login - it **writes** the device ID
+- `vigilarSesion()` is called on **every protected page** - it **only listens**, never writes
+
+This separation prevents infinite eviction loops where devices continuously overwrite each other.
+</Note>
+
+### Device ID Generation
+
+Each browser instance gets a unique, persistent device ID:
+
+```javascript js/seguridad.js
+export const getDeviceId = () => {
+    let id = localStorage.getItem("rip_deviceId");
+    if (!id) {
+        id = 'dev_' + Math.random().toString(36).substr(2, 9) + Date.now();
+        localStorage.setItem("rip_deviceId", id);
+    }
+    return id;
+};
+```
+
+<ResponseField name="Storage" type="localStorage">
+  Device ID persists across sessions and page reloads within the same browser
+</ResponseField>
+
+<ResponseField name="Format" type="string">
+  `dev_` prefix + random alphanumeric + timestamp (e.g., `dev_k3j9x2q1a1709834521`)
+</ResponseField>
+
+<ResponseField name="Uniqueness" type="per-browser">
+  Different browsers on the same machine get different IDs. Incognito mode gets a separate ID.
+</ResponseField>
+
+### Session Claiming (Login Only)
+
+When a user logs in, this function **overwrites** any existing session:
+
+```javascript js/seguridad.js
+export async function reclamarSesion(db, userId) {
+    const deviceId = getDeviceId();
+    await setDoc(doc(db, "sessions", userId), {
+        deviceId,
+        claimedAt: Date.now()
+    }); // No merge → complete overwrite → evicts previous device
+}
+```
+
+<Warning>
+This function uses `setDoc()` **without merge**, which completely overwrites the document. This is intentional - it ensures the new device becomes the only authorized device.
+</Warning>
+
+### Session Monitoring (All Protected Pages)
+
+Every protected page calls this function to monitor for session changes:
+
+```javascript js/seguridad.js
+export function vigilarSesion(auth, db, contenedorId) {
+    const deviceId = getDeviceId();
+    let unsub = null;
+    let expulsado = false;
+
+    auth.onAuthStateChanged((user) => {
+        if (!user) {
+            if (!window.location.pathname.includes("index.html"))
+                window.location.href = "index.html";
+            return;
+        }
+
+        const sessionRef = doc(db, "sessions", user.uid);
+
+        // Clean up previous listener
+        if (unsub) { unsub(); unsub = null; }
+
+        // ONLY LISTEN — never write here
+        unsub = onSnapshot(sessionRef, (snap) => {
+            if (expulsado) return;
+            if (!snap.exists()) return;
+
+            const data = snap.data();
+
+            // If device ID changed → someone else logged in → evict this device
+            if (data.deviceId && data.deviceId !== deviceId) {
+                expulsado = true;
+                if (unsub) { unsub(); unsub = null; }
+                const wrapper = document.getElementById(contenedorId);
+                manejarExpulsion(wrapper, auth);
+            }
+        });
+    });
+}
+```
+
+### How It Works
+
+<CodeGroup>
+```javascript Scenario 1: User A logs in on Desktop
+// Desktop claims session
+await reclamarSesion(db, "user123");
+// Firestore now contains:
+{
+  deviceId: "dev_desktop_abc",
+  claimedAt: 1709834521000
+}
+```
+
+```javascript Scenario 2: User A logs in on Mobile
+// Mobile claims session (overwrites desktop)
+await reclamarSesion(db, "user123");
+// Firestore now contains:
+{
+  deviceId: "dev_mobile_xyz",
+  claimedAt: 1709834598000
+}
+// Desktop's vigilarSesion() detects change → triggers eviction
+```
+</CodeGroup>
+
+## Eviction Screen
+
+When a device detects it has been evicted, it shows this screen:
+
+```javascript js/seguridad.js
+export function manejarExpulsion(contenedor, auth) {
+    if (!contenedor) return;
+
+    contenedor.innerHTML = `
+        <div style="min-height:80vh; display:flex; align-items:center; justify-content:center; padding:20px;">
+            <div class="expulsion-card">
+                <div style="font-size:3rem; margin-bottom:12px;">🚫</div>
+                <h3 style="color:#e50914; font-size:1.4rem; margin-bottom:10px;">Sesión desplazada</h3>
+                <p style="color:#ccc; margin-bottom:16px;">Tu cuenta fue abierta en otro dispositivo o navegador.</p>
+                <div class="aviso-importante">
+                    ⚠️ <strong>Recuerda:</strong> Solo se permite <b>un dispositivo activo</b> por cuenta a la vez.
+                </div>
+                <p style="color:#fff; margin-top:20px; font-size:0.95rem;">
+                    Cerrando sesión en <span id="seg-cuenta" style="color:#e50914; font-weight:700; font-size:1.2rem;">10</span>s...
+                </p>
+            </div>
+        </div>`;
+
+    let seg = 10;
+    const t = setInterval(async () => {
+        seg--;
+        const el = document.getElementById("seg-cuenta");
+        if (el) el.textContent = seg;
+        if (seg <= 0) {
+            clearInterval(t);
+            await signOut(auth);
+            window.location.href = "index.html";
+        }
+    }, 1000);
+}
+```
+
+### Eviction Experience
+
+<Steps>
+  <Step title="Detection">
+    `vigilarSesion()` detects device ID mismatch via Firestore snapshot listener
+  </Step>
+  <Step title="UI Replacement">
+    Entire page content replaced with eviction message
+  </Step>
+  <Step title="Countdown">
+    10-second countdown displayed to user
+  </Step>
+  <Step title="Auto Logout">
+    `signOut()` called and redirect to login page
+  </Step>
+</Steps>
+
+## Protected Routes
+
+Every protected page includes this pattern:
+
+```javascript home.html
+import { auth, db } from "./firebase.js";
+import { vigilarSesion, globalLogout } from "./js/seguridad.js";
+
+// Start session monitoring
+vigilarSesion(auth, db, "home-wrapper");
+
+// Logout button
+document.getElementById("btnLogOut").onclick = () => globalLogout(auth);
+```
+
+### Global Logout
+
+```javascript js/seguridad.js
+export async function globalLogout(auth) {
+    await signOut(auth);
+    window.location.href = "index.html";
+}
+```
+
+## Admin Access Control
+
+The admin panel has additional email-based access control:
+
+```javascript admin.html
+const ADMIN_EMAIL = "admin@ripper.com";
+
+onAuthStateChanged(auth, user => {
+    if (user && user.email === ADMIN_EMAIL) {
+        cargarTemas();
+    } else {
+        alert("Acceso denegado.");
+        window.location.href = "home.html";
+    }
+});
+```
+
+<Note>
+Admin access is determined by email address, not role field. Only the account with email `admin@ripper.com` can access the admin panel.
+</Note>
+
+## Session Data Schema
+
+Sessions are stored in Firestore's `sessions` collection:
+
+```typescript
+collection: "sessions"
+document ID: user.uid
+fields:
+  {
+    deviceId: string,      // Current authorized device
+    claimedAt: number      // Timestamp when session was claimed
+  }
+```
+
+See [Database Schema](/technical/database-schema#sessions-collection) for more details.
+
+## Security Considerations
+
+<AccordionGroup>
+  <Accordion title="Why single-device enforcement?">
+    Prevents account sharing and unauthorized access. Ensures premium content is accessed by paying users only.
+  </Accordion>
+  
+  <Accordion title="Can users bypass this?">
+    Not easily. Device ID is stored in localStorage which is isolated per browser. Clearing localStorage generates a new device ID, but the user still gets evicted when they log in elsewhere.
+  </Accordion>
+  
+  <Accordion title="What if Firestore listener fails?">
+    The `onSnapshot` listener has error handling. If it fails, the session continues but eviction detection stops. This is a graceful degradation - security isn't completely compromised.
+  </Accordion>
+  
+  <Accordion title="What about session hijacking?">
+    Firebase Auth handles token security. The device ID system prevents **account sharing**, not token theft. Standard web security practices (HTTPS, secure cookies) protect against hijacking.
+  </Accordion>
+</AccordionGroup>
+
+## Common Issues
+
+<Warning>
+**Infinite Eviction Loop (Now Fixed)**
+
+Earlier versions had a bug where `vigilarSesion()` would **write** the device ID on every page load. This caused:
+- Desktop loads page → writes device ID
+- Mobile loads page → writes device ID → evicts desktop
+- Desktop reloads → writes device ID → evicts mobile
+- Infinite loop!
+
+**Solution**: `vigilarSesion()` now **only listens**, never writes. Only `reclamarSesion()` (called during login) writes the device ID.
+</Warning>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Firebase Setup" icon="fire" href="/technical/firebase-setup">
+    Learn about Firebase initialization
+  </Card>
+  <Card title="Database Schema" icon="database" href="/technical/database-schema">
+    View the sessions collection structure
+  </Card>
+</CardGroup>

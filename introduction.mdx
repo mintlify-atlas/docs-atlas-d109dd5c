@@ -1,0 +1,111 @@
+---
+title: Introduction
+description: Welcome to Ripper, a premium web-based streaming platform for Peruvian huayno music with sheet music visualization.
+---
+
+## What is Ripper?
+
+Ripper is a **web-based music streaming platform** designed specifically for Peruvian huayno music. It provides a Netflix-style interface that allows musicians and enthusiasts to stream huayno songs while viewing synchronized sheet music and partituras.
+
+<Note>
+  Ripper focuses on huayno music in the **Huaraz style**, featuring traditional Peruvian bands and regional variations across different tonalities.
+</Note>
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Music Streaming" icon="play">
+    Stream high-quality huayno music from YouTube and Google Drive sources with synchronized playback.
+  </Card>
+  
+  <Card title="Sheet Music Access" icon="music">
+    View partituras and sheet music while listening to your favorite huayno songs.
+  </Card>
+  
+  <Card title="Organized Catalog" icon="grid">
+    Browse songs organized by tonality (La menor, Mi menor, Re menor, Sol menor) and category.
+  </Card>
+  
+  <Card title="Premium Access" icon="lock">
+    Secure authentication system with single-device session management powered by Firebase.
+  </Card>
+</CardGroup>
+
+## Platform Architecture
+
+Ripper is built as a modern single-page application with:
+
+- **Frontend**: Vanilla JavaScript with modular ES6 imports
+- **Backend**: Firebase Authentication and Firestore for user management
+- **Streaming**: YouTube and Google Drive integration for audio playback
+- **Styling**: Custom CSS with a cinematic, streaming-platform aesthetic
+
+### Technology Stack
+
+```javascript
+// Core Technologies
+{
+  "authentication": "Firebase Auth (v10.7.1)",
+  "database": "Cloud Firestore with IndexedDB persistence",
+  "frontend": "HTML5, CSS3, ES6 JavaScript",
+  "fonts": "Bebas Neue, Outfit (Google Fonts)",
+  "icons": "Font Awesome 6.0"
+}
+```
+
+## Music Catalog
+
+Ripper features **86+ huayno songs** from renowned Peruvian bands including:
+
+- Banda Show La Huaranchal
+- Banda Centro Musical Pomapata
+- Banda Orquesta Social Huancaya (BOSH)
+- Banda Jazz Perú Sunicancha
+- Banda Perú Armonía y Clase (PAC)
+- And many more...
+
+<Warning>
+  Access to the full music catalog requires a premium account. Contact the administrator via WhatsApp to request access.
+</Warning>
+
+## User Experience
+
+The platform provides a **streaming-style interface** inspired by modern media platforms:
+
+- Dark theme optimized for extended viewing
+- Responsive design for desktop and mobile devices
+- Carousel-based navigation for browsing content
+- Real-time session management
+- Cinematic backgrounds with dynamic animations
+
+## Who Is Ripper For?
+
+<AccordionGroup>
+  <Accordion title="Musicians & Band Members">
+    Access sheet music and partituras while listening to reference recordings in various tonalities.
+  </Accordion>
+  
+  <Accordion title="Music Students">
+    Study traditional Peruvian huayno arrangements and learn from professional banda performances.
+  </Accordion>
+  
+  <Accordion title="Music Enthusiasts">
+    Discover and enjoy curated collections of authentic huayno music from the Huaraz region.
+  </Accordion>
+  
+  <Accordion title="Researchers">
+    Explore regional variations and traditional repertoire of Peruvian banda music.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get started with Ripper in under 5 minutes
+  </Card>
+  
+  <Card title="Authentication" icon="key" href="/authentication">
+    Learn about login, sessions, and account security
+  </Card>
+</CardGroup>

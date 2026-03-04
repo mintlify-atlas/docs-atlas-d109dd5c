@@ -1,80 +1,267 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get started with Ripper in under 5 minutes"
 ---
 
-## Get started in three steps
+Get your account set up and start streaming Peruvian huayno music with synchronized sheet music in just a few steps.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, you'll need:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+- A modern web browser (Chrome, Firefox, Safari, or Edge)
+- An active internet connection
+- A WhatsApp account to request access
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Ripper requires **account approval** from the administrator. Each account is limited to **one active device at a time** for security purposes.
 </Note>
+
+## Getting Started
+
+<Steps>
+  <Step title="Request Account Access">
+    Contact the administrator via WhatsApp to request a premium account.
+    
+    **Contact Number**: +51 933 287 274
+    
+    From `index.html:424`:
+    ```html
+    <a href="https://wa.me/51933287274" target="_blank" class="btn-whatsapp" rel="noopener noreferrer">
+        <i class="fab fa-whatsapp"></i> WhatsApp
+    </a>
+    ```
+    
+    <Info>
+      The administrator will create your account credentials and send them to you securely. Account creation typically takes 24-48 hours.
+    </Info>
+  </Step>
+
+  <Step title="Access the Login Page">
+    Navigate to the Ripper landing page. You can access it from either:
+    
+    - **Main landing page**: `index.html`
+    - **Direct login page**: `login.html`
+    
+    The landing page features a hero section with the Ripper branding and a login panel.
+  </Step>
+
+  <Step title="Log In with Your Credentials">
+    Enter your email and password in the login panel.
+    
+    From `index.html:416-420`:
+    ```html
+    <label>Correo</label>
+    <input type="email" id="email" placeholder="ejemplo@correo.com" class="login-input">
+    <label>Contraseña</label>
+    <input type="password" id="password" placeholder="••••••••" class="login-input">
+    <button id="btnLogin" class="btn-login">ENTRAR</button>
+    ```
+    
+    <Tip>
+      Press **Enter** after typing your password to submit the form quickly without clicking the button.
+    </Tip>
+    
+    **What happens during login:**
+    
+    1. Your credentials are validated with Firebase Authentication
+    2. A session is claimed for your device (expelling any other active sessions)
+    3. You're redirected to the home page
+    
+    From `index.html:489-511`:
+    ```javascript
+    btnLogin.onclick = async () => {
+        const email = document.getElementById("email").value;
+        const pass  = document.getElementById("password").value;
+        if (!email || !pass) return;
+        
+        btnLogin.textContent = "VERIFICANDO...";
+        errorMsg.style.display = "none";
+        
+        try {
+            // 1. Iniciar sesión
+            const cred = await signInWithEmailAndPassword(auth, email, pass);
+            
+            // 2. ACTUALIZAR DISPOSITIVO (Crucial para la expulsión)
+            await reclamarSesion(db, cred.user.uid);
+            
+            // 3. Redirigir
+            window.location.replace("home.html");
+        } catch (e) {
+            btnLogin.textContent = "ENTRAR";
+            errorMsg.style.display = "block";
+            errorMsg.textContent = "Acceso denegado. Verifica tus datos.";
+        }
+    };
+    ```
+  </Step>
+
+  <Step title="Explore the Home Page">
+    After successful login, you'll land on `home.html` with:
+    
+    - **Hero section**: Featured content with a large banner
+    - **Music carousels**: Browse "Recomendados", "Nuevos", and "Populares" sections
+    - **Navigation**: Access your profile and admin panel (if applicable)
+    
+    From `home.html:306-310`:
+    ```html
+    <h1>Huaynos — Estilo Huaraz</h1>
+    <p>Escucha los huaynos mientras miras la partitura con una experiencia visual inmersiva 
+       y catálogo organizado por categorías.</p>
+    <div class="hero-ctas">
+        <a class="play-btn" href="lista-temas.html?cat=huayno">▶&nbsp; Explorar</a>
+    </div>
+    ```
+    
+    <Info>
+      Use the **carousel navigation arrows** (◀ ▶) to browse through different music categories. On mobile, swipe left or right to scroll.
+    </Info>
+  </Step>
+
+  <Step title="Browse the Music Catalog">
+    Click "Explorar" or any category card to access `lista-temas.html`.
+    
+    **Features:**
+    - **Search bar**: Filter songs by title, artist, or tonality
+    - **Color-coded cards**: Each musical key has a unique color (La menor = purple, Do = red, etc.)
+    - **Tonal sorting**: Songs automatically sorted by tonality, then by major/minor
+    
+    From `lista-temas.html:391-404`:
+    ```javascript
+    const lista = temasCache
+        .filter(t => normalizar(t.titulo).includes(txt) || normalizar(t.artista).includes(txt))
+        .sort((a, b) => {
+            const nA = (a.tonalidad||"").toLowerCase().split(" ")[0];
+            const nB = (b.tonalidad||"").toLowerCase().split(" ")[0];
+            const mA = (a.tonalidad||"").toLowerCase().includes("menor") ? 1 : 0;
+            const mB = (b.tonalidad||"").toLowerCase().includes("menor") ? 1 : 0;
+            const d  = (ORDEN_NOTAS[nA]||99) - (ORDEN_NOTAS[nB]||99);
+            if (d !== 0) return d;
+            if (mA !== mB) return mA - mB;
+            return (a.titulo||"").localeCompare(b.titulo||"");
+        });
+    ```
+  </Step>
+
+  <Step title="Start Streaming">
+    Click any song card to open the music player (`reproductor.html`).
+    
+    **Player features:**
+    - Video playback with synchronized sheet music
+    - Playback controls (play/pause, seek ±1s/±5s/±10s, restart)
+    - Speed control (0.75x - 2x for YouTube sources)
+    - Keyboard shortcuts (Space, ←/→, R, F)
+    - Progress bar with time tracking
+    
+    From `reproductor.html:542-547`:
+    ```html
+    <button id="btn-play" onclick="togglePlay()" aria-label="Reproducir o pausar">
+        <svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="icon-pause" style="display:none" viewBox="0 0 24 24">
+            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+        </svg>
+    </button>
+    ```
+    
+    <Tip>
+      Use **keyboard shortcuts** for precise control:
+      - **Space**: Play/pause
+      - **←/→**: Seek ±5 seconds
+      - **R**: Restart from beginning
+      - **F**: Toggle fullscreen
+    </Tip>
+  </Step>
+</Steps>
+
+## Common Login Errors
+
+<AccordionGroup>
+  <Accordion title="'Acceso denegado. Verifica tus datos.'">
+    **Cause**: Invalid email or password, or account doesn't exist.
+    
+    **Solution**:
+    - Double-check your email and password for typos
+    - Ensure your account has been created by the administrator
+    - Contact support via WhatsApp if issues persist
+  </Accordion>
+  
+  <Accordion title="Session displacement / 'Sesión desplazada'">
+    **Cause**: You logged in from another device or browser.
+    
+    **Solution**:
+    - Ripper enforces **single-device sessions**
+    - If you see the expulsion screen, another device logged in with your credentials
+    - Log out from other devices before logging in again
+    
+    From `js/seguridad.js:41-71`:
+    ```javascript
+    export function manejarExpulsion(contenedor, auth) {
+        contenedor.innerHTML = `
+            <div class="expulsion-card">
+                <h3>Sesión desplazada</h3>
+                <p>Tu cuenta fue abierta en otro dispositivo o navegador.</p>
+                <div class="aviso-importante">
+                    ⚠️ <strong>Recuerda:</strong> Solo se permite <b>un dispositivo activo</b> 
+                    por cuenta a la vez.
+                </div>
+                <p>Cerrando sesión en <span id="seg-cuenta">10</span>s...</p>
+            </div>`;
+        // 10-second countdown then auto-logout
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Blank page after login">
+    **Cause**: JavaScript error or network connectivity issue.
+    
+    **Solution**:
+    - Check browser console for errors (F12 → Console tab)
+    - Ensure you have a stable internet connection
+    - Clear browser cache and try again
+    - Try a different browser
+  </Accordion>
+</AccordionGroup>
+
+## Admin Access
+
+If your account has admin privileges (`admin@ripper.com`), you'll see an **Admin** button in the header on `home.html`:
+
+From `home.html:379-390`:
+```javascript
+onAuthStateChanged(auth, (user) => {
+    if (user && user.email === ADMIN_EMAIL) {
+        const zone = document.getElementById("admin-zone");
+        if (zone) {
+            zone.innerHTML = `
+                <a href="admin.html" class="btn-nav btn-admin">
+                    <svg>...</svg>
+                    <span>Admin</span>
+                </a>`;
+        }
+    }
+});
+```
+
+<Warning>
+  Admin access is restricted to the designated administrator email. Regular users will not see the Admin button.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Browse Music" icon="list-music" href="/guides/browsing-music">
+    Learn advanced browsing and search techniques
+  </Card>
+  
+  <Card title="Player Controls" icon="gamepad" href="/guides/player-controls">
+    Master the music player controls and features
+  </Card>
+  
+  <Card title="Keyboard Shortcuts" icon="keyboard" href="/guides/keyboard-shortcuts">
+    Speed up your workflow with keyboard shortcuts
+  </Card>
+  
+  <Card title="Authentication" icon="shield-check" href="/authentication">
+    Understand session management and security
+  </Card>
+</CardGroup>

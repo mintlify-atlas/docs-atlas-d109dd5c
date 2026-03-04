@@ -1,0 +1,204 @@
+---
+title: "Accessing the Admin Panel"
+description: "Learn how to access and authenticate into the Ripper admin panel"
+---
+
+The Ripper admin panel provides a centralized interface for managing your entire music catalog. Access is restricted to authorized administrators only.
+
+## Admin Access Control
+
+Ripper implements a strict single-device session system to ensure secure access to the admin panel.
+
+### Authentication Requirements
+
+<Warning>
+  Only the account with email `admin@ripper.com` has access to the admin panel. All other users will be redirected to the home page.
+</Warning>
+
+The authentication check occurs on page load:
+
+```javascript admin.html
+const ADMIN_EMAIL = "admin@ripper.com";
+
+onAuthStateChanged(auth, user => {
+    if (user && user.email === ADMIN_EMAIL) {
+        cargarTemas();
+    } else {
+        alert("Acceso denegado.");
+        window.location.href = "home.html";
+    }
+});
+```
+
+## Single-Device Session Management
+
+Ripper enforces a single active device policy to prevent simultaneous access from multiple locations.
+
+### How It Works
+
+<Steps>
+  <Step title="Device Registration">
+    When you log in, a unique device ID is generated and stored in `localStorage`:
+
+    ```javascript js/seguridad.js
+    export const getDeviceId = () => {
+        let id = localStorage.getItem("rip_deviceId");
+        if (!id) {
+            id = 'dev_' + Math.random().toString(36).substr(2, 9) + Date.now();
+            localStorage.setItem("rip_deviceId", id);
+        }
+        return id;
+    };
+    ```
+  </Step>
+
+  <Step title="Session Claiming">
+    Upon successful login, your device claims the session by writing to Firestore:
+
+    ```javascript js/seguridad.js
+    export async function reclamarSesion(db, userId) {
+        const deviceId = getDeviceId();
+        await setDoc(doc(db, "sessions", userId), {
+            deviceId,
+            claimedAt: Date.now()
+        }); // Overwrites previous session, expelling the other device
+    }
+    ```
+  </Step>
+
+  <Step title="Session Monitoring">
+    Every protected page monitors the session in real-time:
+
+    ```javascript js/seguridad.js
+    export function vigilarSesion(auth, db, contenedorId) {
+        const deviceId = getDeviceId();
+        // ...
+        unsub = onSnapshot(sessionRef, (snap) => {
+            if (expulsado) return;
+            if (!snap.exists()) return;
+
+            const data = snap.data();
+            // If deviceId changed, another device logged in
+            if (data.deviceId && data.deviceId !== deviceId) {
+                expulsado = true;
+                manejarExpulsion(wrapper, auth);
+            }
+        });
+    }
+    ```
+  </Step>
+
+  <Step title="Automatic Expulsion">
+    If a different device logs in, you'll see an expulsion screen with a 10-second countdown before automatic logout:
+
+    ```javascript js/seguridad.js
+    export function manejarExpulsion(contenedor, auth) {
+        contenedor.innerHTML = `
+            <div>
+                <h3>Sesión desplazada</h3>
+                <p>Tu cuenta fue abierta en otro dispositivo o navegador.</p>
+                <p>Cerrando sesión en <span id="seg-cuenta">10</span>s...</p>
+            </div>`;
+        // Countdown and auto-logout logic
+    }
+    ```
+  </Step>
+</Steps>
+
+## Accessing the Panel
+
+### Step-by-Step Access
+
+1. **Navigate to Login Page**
+   - Open `index.html` in your browser
+   - You'll see the Ripper login interface
+
+2. **Enter Admin Credentials**
+   - Email: `admin@ripper.com`
+   - Password: Your configured admin password
+
+3. **Access Admin Panel**
+   - After successful authentication, navigate to `admin.html`
+   - The system will verify your admin status
+
+<Note>
+  If you're already logged in from another device or browser, that session will be immediately terminated when you log in from the new location.
+</Note>
+
+## Admin Panel Overview
+
+Once authenticated, you'll have access to the full admin interface at `/admin.html`:
+
+### Dashboard Statistics
+
+The admin panel displays real-time statistics:
+
+```javascript admin.html
+function updateStats() {
+    refs.statTotal.textContent = allTemas.length;
+    refs.statYt.textContent = allTemas.filter(t => t.fuente === "youtube").length;
+    refs.statDrive.textContent = allTemas.filter(t => t.fuente === "drive").length;
+    refs.statCats.textContent = new Set(allTemas.map(t => t.categoria || "sin")).size;
+}
+```
+
+The dashboard shows:
+- **Total temas**: Total number of tracks in the database
+- **YouTube**: Count of YouTube-sourced tracks
+- **Drive**: Count of Google Drive-sourced tracks  
+- **Categorías**: Number of unique categories
+
+### Navigation
+
+The admin panel header provides:
+- **Inicio** button: Return to the home page (`home.html`)
+- **Salir** button: Logout using `globalLogout(auth)` from `js/seguridad.js`
+
+## Logging Out
+
+To securely end your admin session:
+
+```javascript admin.html
+document.getElementById("btnLogOut").onclick = () => globalLogout(auth);
+```
+
+The `globalLogout` function from `js/seguridad.js`:
+
+```javascript js/seguridad.js
+export async function globalLogout(auth) {
+    await signOut(auth);
+    window.location.href = "index.html";
+}
+```
+
+<Warning>
+  Always log out when finished to prevent unauthorized access. The single-device policy helps protect your account, but proper logout hygiene is essential.
+</Warning>
+
+## Security Best Practices
+
+- **Never share admin credentials** with unauthorized users
+- **Always log out** when leaving your workstation
+- **Monitor session warnings** - if you see an unexpected expulsion, your credentials may be compromised
+- **Keep browser updated** to ensure `localStorage` persistence works correctly
+- **Use HTTPS** in production to protect authentication tokens in transit
+
+## Troubleshooting
+
+### "Acceso denegado" Alert
+
+**Problem**: You see an access denied alert and are redirected to `home.html`
+
+**Solution**: Verify you're logged in with the `admin@ripper.com` account. Other email addresses do not have admin privileges.
+
+### Session Expulsion Loop
+
+**Problem**: You keep getting expelled immediately after logging in
+
+**Solution**: Check if another browser tab or device is open with the same account. Close all other sessions and try again.
+
+### Device ID Persistence Issues
+
+**Problem**: You're asked to re-authenticate frequently
+
+**Solution**: Check that `localStorage` is enabled in your browser. Private/incognito mode may clear storage between sessions.

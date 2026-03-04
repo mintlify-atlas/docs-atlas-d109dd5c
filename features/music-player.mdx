@@ -1,0 +1,374 @@
+---
+title: "Music Player"
+description: "Advanced YouTube and Google Drive video player with custom controls and keyboard shortcuts"
+---
+
+The Ripper music player is a custom-built video player designed specifically for practicing Peruvian huayno music. It supports both YouTube and Google Drive video sources with frame-precise controls.
+
+## Overview
+
+The player is built on top of the YouTube IFrame API and provides:
+
+- Frame-precise seeking controls (±1s, ±5s, ±10s)
+- Custom playback speed controls
+- Keyboard shortcuts for hands-free operation
+- Tonality-based color theming
+- Auto-resume on tab switching
+- Copy link with timestamp
+
+## Player Interface
+
+The player interface consists of several key components:
+
+<CardGroup cols={2}>
+  <Card title="Video Container" icon="rectangle-wide">
+    16:9 aspect ratio video display with loading screen and overlay controls
+  </Card>
+  <Card title="Custom Controls" icon="sliders">
+    Replace default YouTube controls with practice-optimized buttons
+  </Card>
+  <Card title="Progress Bar" icon="chart-line">
+    Visual feedback showing playback position and total duration
+  </Card>
+  <Card title="Speed Controls" icon="gauge">
+    Adjust playback speed from 0.75x to 2x for practice
+  </Card>
+</CardGroup>
+
+## Video Sources
+
+Ripper supports two video sources, each with different features:
+
+### YouTube Videos
+
+Implemented in `reproductor.html:686-712`:
+
+```javascript
+window.player = new YT.Player("player", {
+    height: "100%",
+    width: "100%",
+    videoId: temaData.videoId,
+    playerVars: {
+        start: inicio,
+        controls: 0,
+        modestbranding: 1,
+        rel: 0,
+        disablekb: 1,
+        playsinline: 1
+    },
+    events: {
+        onReady: () => {
+            document.getElementById("loading-screen").style.display = "none";
+            document.getElementById("yt-overlay").style.display = "flex";
+            const total = window.player?.getDuration?.() || 0;
+            txtTotal.textContent = fmtTime(total);
+        },
+        onStateChange: ytStateChange
+    }
+});
+```
+
+**YouTube Features:**
+- Custom start time
+- Disabled default controls
+- Playback speed adjustment
+- Frame-precise seeking
+- Progress tracking
+
+### Google Drive Videos
+
+Implemented in `reproductor.html:721-732`:
+
+```javascript
+const iframe = document.createElement("iframe");
+iframe.src = `https://drive.google.com/file/d/${temaData.videoId}/preview`;
+iframe.allow = "autoplay";
+iframe.style.cssText = "width:100%;height:100%;border:none;";
+iframe.onload = () => document.getElementById("loading-screen").style.display = "none";
+document.getElementById("player").appendChild(iframe);
+```
+
+<Warning>
+  Google Drive videos have limited control capabilities. Speed controls are disabled and the "Open externally" button is blocked to prevent users from leaving the player.
+</Warning>
+
+## Playback Controls
+
+### Seek Controls
+
+Frame-precise seeking is implemented with multiple time increments:
+
+```javascript
+window.seek = (s) => {
+    if (isYouTube && window.player) {
+        window.player.seekTo(window.player.getCurrentTime() + s, true);
+    }
+};
+```
+
+Available seek increments:
+- **-10s** / **+10s** - Large jumps for section navigation
+- **-5s** / **+5s** - Medium jumps for phrase practice
+- **-1s** / **+1s** - Frame-precise adjustments
+
+### Play/Pause Toggle
+
+Implemented in `reproductor.html:763-766`:
+
+```javascript
+window.togglePlay = () => {
+    if (!isYouTube || !window.player) return;
+    playing ? window.player.pauseVideo() : window.player.playVideo();
+};
+```
+
+The play button features:
+- Pulsing animation when paused
+- Visual state indication (play/pause icon swap)
+- Red accent color with glow effect
+
+### Restart Function
+
+Returns to the configured start time from the database:
+
+```javascript
+window.reiniciar = () => {
+    if (isYouTube && window.player) {
+        window.player.seekTo(inicio, true);
+        window.player.playVideo();
+    }
+};
+```
+
+## Playback Speed
+
+Speed control selector from `reproductor.html:564-573`:
+
+```html
+<select id="speed-select" class="speed-select">
+    <option value="0.75">0.75x</option>
+    <option value="1" selected>1x</option>
+    <option value="1.25">1.25x</option>
+    <option value="1.5">1.5x</option>
+    <option value="2">2x</option>
+</select>
+```
+
+Speed changes are applied via event listener (`reproductor.html:781-785`):
+
+```javascript
+speedSelect.addEventListener("change", () => {
+    if (!isYouTube || !window.player) return;
+    const rate = Number(speedSelect.value);
+    if (!Number.isNaN(rate)) window.player.setPlaybackRate(rate);
+});
+```
+
+<Note>
+  Speed controls are only available for YouTube videos. This feature is automatically hidden for Google Drive sources.
+</Note>
+
+## Progress Tracking
+
+Real-time progress updates every 500ms (`reproductor.html:753-761`):
+
+```javascript
+setInterval(() => {
+    if (window.player && isYouTube) {
+        const d = window.player.getDuration?.() || 0;
+        const c = window.player.getCurrentTime?.() || 0;
+        txtCurrent.textContent = fmtTime(c);
+        txtTotal.textContent = fmtTime(d);
+        if (d > 0) progressFill.style.width = (c / d * 100) + "%";
+    }
+}, 500);
+```
+
+Time formatting function (`reproductor.html:637-642`):
+
+```javascript
+function fmtTime(seconds) {
+    const total = Math.max(0, Math.floor(seconds || 0));
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+```
+
+## Keyboard Shortcuts
+
+Full keyboard navigation implemented in `reproductor.html:818-842`:
+
+```javascript
+document.addEventListener("keydown", (e) => {
+    const activeTag = (document.activeElement?.tagName || "").toLowerCase();
+    if (["input", "textarea", "select"].includes(activeTag)) return;
+
+    if (e.code === "Space") {
+        e.preventDefault();
+        window.togglePlay();
+    }
+    if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        window.seek(-5);
+    }
+    if (e.key === "ArrowRight") {
+        e.preventDefault();
+        window.seek(5);
+    }
+    if (e.key.toLowerCase() === "r") {
+        e.preventDefault();
+        window.reiniciar();
+    }
+    if (e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        btnFullscreen.click();
+    }
+});
+```
+
+| Shortcut | Action |
+|----------|--------|
+| **Space** | Play/Pause toggle |
+| **←** | Seek backward 5 seconds |
+| **→** | Seek forward 5 seconds |
+| **R** | Restart from configured start time |
+| **F** | Toggle fullscreen mode |
+
+<Tip>
+  Keyboard shortcuts are disabled when focus is on input fields, preventing conflicts during text entry.
+</Tip>
+
+## Tonality Color System
+
+Each musical key is assigned a unique color, defined in `reproductor.html:623-631`:
+
+```javascript
+const TONE_MAP = {
+    do: "229,9,20",
+    re: "255,123,0",
+    mi: "255,196,0",
+    fa: "33,198,131",
+    sol: "22,163,255",
+    la: "112,86,255",
+    si: "228,79,227"
+};
+```
+
+The tonality badge displays with dynamic color (`reproductor.html:644-649`):
+
+```javascript
+function applyToneColor(tonalidad) {
+    const normalized = normalizar(tonalidad);
+    const note = normalized.split(" ")[0];
+    const tone = TONE_MAP[note] || "229,9,20";
+    document.getElementById("txt-tono").style.setProperty("--tone", tone);
+}
+```
+
+## Additional Features
+
+### Copy Link with Timestamp
+
+From `reproductor.html:787-803`:
+
+```javascript
+btnCopyLink.addEventListener("click", async () => {
+    try {
+        let url = window.location.href;
+        if (isYouTube && window.player) {
+            const t = Math.floor(window.player.getCurrentTime?.() || 0);
+            const u = new URL(window.location.href);
+            u.searchParams.set("t", String(t));
+            url = u.toString();
+        }
+        await navigator.clipboard.writeText(url);
+        btnCopyLink.textContent = "Copiado";
+        setTimeout(() => { btnCopyLink.textContent = "Copiar link"; }, 1200);
+    } catch {
+        btnCopyLink.textContent = "No disponible";
+        setTimeout(() => { btnCopyLink.textContent = "Copiar link"; }, 1200);
+    }
+});
+```
+
+### Fullscreen Support
+
+From `reproductor.html:805-816`:
+
+```javascript
+btnFullscreen.addEventListener("click", async () => {
+    const container = document.getElementById("video-container");
+    if (!document.fullscreenElement) {
+        try {
+            await container.requestFullscreen();
+        } catch (e) {
+            console.error(e);
+        }
+    } else {
+        await document.exitFullscreen();
+    }
+});
+```
+
+### Auto-Resume on Tab Return
+
+Prevents pause when switching tabs (`reproductor.html:713-720`):
+
+```javascript
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && isYouTube && window.player && playing) {
+        ignorarPausa = true;
+        setTimeout(() => { ignorarPausa = false; }, 2000);
+        window.player.playVideo();
+    }
+});
+```
+
+<Note>
+  The auto-resume feature prevents accidental pauses when users switch browser tabs during practice sessions.
+</Note>
+
+## URL Parameters
+
+The player accepts the following URL parameters:
+
+| Parameter | Description | Example |
+|-----------|-------------|----------|
+| `id` | Firestore document ID of the song | `?id=abc123` |
+| `cat` | Category (for back navigation) | `?cat=huayno` |
+| `t` | Override start time in seconds | `?t=45` |
+
+Parsing logic from `reproductor.html:602-606`:
+
+```javascript
+const params   = new URLSearchParams(window.location.search);
+const idTema   = params.get("id");
+const catParam = params.get("cat") || "huayno";
+const forcedStart = Number(params.get("t") || "0");
+document.getElementById("btn-volver").href = `lista-temas.html?cat=${catParam}`;
+```
+
+## Loading States
+
+The player shows a loading screen while fetching data:
+
+```html
+<div id="loading-screen">
+    <div class="loader-ring"></div>
+    <p class="loader-text">Obteniendo video</p>
+</div>
+```
+
+The loading screen is hidden once the player is ready to play.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Catalog Browsing" icon="list" href="/features/catalog-browsing">
+    Browse and filter songs before playing
+  </Card>
+  <Card title="Admin Panel" icon="gear" href="/features/admin-panel">
+    Manage video sources and metadata
+  </Card>
+</CardGroup>

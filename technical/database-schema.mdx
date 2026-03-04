@@ -1,0 +1,474 @@
+---
+title: Database Schema
+description: Firestore database structure for songs, sessions, and metadata in Ripper
+---
+
+## Overview
+
+Ripper uses **Cloud Firestore** as its primary database. The schema is designed for real-time synchronization, offline support, and efficient querying of music catalog data.
+
+## Collections
+
+### `temas` Collection
+
+Stores all songs ("temas") in the Ripper catalog. Each document represents a single song with metadata and playback information.
+
+```typescript
+collection: "temas"
+document ID: auto-generated Firestore ID
+fields:
+  {
+    titulo: string,           // Song title
+    artista: string,          // Band/artist name
+    tonalidad: string,        // Musical key (e.g., "La menor", "Mi menor")
+    videoId: string,          // YouTube video ID or Google Drive file ID
+    inicio: number,           // Start time in seconds
+    categoria: string,        // Category: "huayno", "salay", or "cumbia"
+    fuente: string,           // Source: "youtube" or "drive"
+    createdAt: timestamp      // Server timestamp when created
+  }
+```
+
+#### Field Descriptions
+
+<ResponseField name="titulo" type="string" required>
+  Song title in Spanish. Required field validated on client and server.
+  
+  **Example**: `"Collar de Lágrimas"`
+</ResponseField>
+
+<ResponseField name="artista" type="string">
+  Band or artist name. Optional but recommended for organization.
+  
+  **Example**: `"Banda Show Filarmónica Star Otuzco"`
+</ResponseField>
+
+<ResponseField name="tonalidad" type="string">
+  Musical key in Spanish notation. Used for filtering by musicians.
+  
+  **Valid values**: `"La menor"`, `"Mi menor"`, `"Re menor"`, `"Sol menor"`, etc.
+</ResponseField>
+
+<ResponseField name="videoId" type="string" required>
+  Video/audio source identifier:
+  - **YouTube**: 11-character video ID (e.g., `"FTV-9T8b05I"`)
+  - **Google Drive**: Long alphanumeric file ID (e.g., `"1O55K7VysXG37LJdeyC-O96rysmQwTt_x"`)
+  
+  The app automatically extracts IDs from full URLs.
+</ResponseField>
+
+<ResponseField name="inicio" type="number" default="0">
+  Playback start time in seconds. Used to skip intros or navigate to specific sections.
+  
+  **Example**: `29` (starts at 0:29)
+</ResponseField>
+
+<ResponseField name="categoria" type="string" required>
+  Music genre category for organization and filtering.
+  
+  **Valid values**:
+  - `"huayno"` - Traditional Huayno music (default)
+  - `"salay"` - Salay style
+  - `"cumbia"` - Cumbia fusion
+</ResponseField>
+
+<ResponseField name="fuente" type="string" required>
+  Media source platform. Determines embed format.
+  
+  **Valid values**:
+  - `"youtube"` - YouTube video embed
+  - `"drive"` - Google Drive audio/video embed
+</ResponseField>
+
+<ResponseField name="createdAt" type="timestamp">
+  Server-generated timestamp using `serverTimestamp()`. Used for sorting by recency.
+</ResponseField>
+
+#### Example Document
+
+```json
+{
+  "titulo": "Ayer la vi a mi ex",
+  "artista": "Banda Jazz Perú Sunicancha",
+  "tonalidad": "La menor",
+  "videoId": "FTV-9T8b05I",
+  "inicio": 29,
+  "categoria": "huayno",
+  "fuente": "youtube",
+  "createdAt": Timestamp(seconds=1709834521, nanoseconds=0)
+}
+```
+
+### `sessions` Collection
+
+Manages single-device authentication sessions. Each document represents one user's current active session.
+
+```typescript
+collection: "sessions"
+document ID: user.uid (Firebase Auth user ID)
+fields:
+  {
+    deviceId: string,         // Unique device identifier
+    claimedAt: number         // Timestamp when session was claimed
+  }
+```
+
+#### Field Descriptions
+
+<ResponseField name="deviceId" type="string" required>
+  Unique identifier for the currently authorized device. Format: `dev_[random]_[timestamp]`
+  
+  **Example**: `"dev_k3j9x2q1a1709834521"`
+  
+  When this changes, all other devices are automatically evicted.
+</ResponseField>
+
+<ResponseField name="claimedAt" type="number" required>
+  JavaScript timestamp (milliseconds since epoch) when session was claimed.
+  
+  **Example**: `1709834521000`
+  
+  Used for debugging and potential session expiry features.
+</ResponseField>
+
+#### Example Document
+
+```json
+// Document ID: "AbCdEfGhIjKlMnOpQrStUv" (user.uid)
+{
+  "deviceId": "dev_k3j9x2q1a1709834521",
+  "claimedAt": 1709834521000
+}
+```
+
+## CRUD Operations
+
+### Creating Songs
+
+New songs are added through the admin panel:
+
+```javascript admin.html
+import { collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const payload = {
+    titulo: "Collar de Lágrimas",
+    artista: "Banda Show Filarmónica Star Otuzco",
+    tonalidad: "La menor",
+    videoId: "AaSC5eeHfyU",
+    inicio: 40,
+    categoria: "huayno",
+    fuente: "youtube",
+    createdAt: serverTimestamp()
+};
+
+const ref = await addDoc(collection(db, "temas"), payload);
+console.log("Created song with ID:", ref.id);
+```
+
+### Reading Songs
+
+Songs are fetched using `getDocs()` for full catalog or queried with filters:
+
+```javascript admin.html
+import { getDocs, collection } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+async function cargarTemas() {
+    const snap = await getDocs(collection(db, "temas"));
+    const temas = snap.docs.map(d => {
+        const data = d.data();
+        return {
+            _id: d.id,
+            ...data,
+            createdAtMs: data.createdAt?.toMillis ? data.createdAt.toMillis() : 0
+        };
+    });
+    return temas;
+}
+```
+
+<Note>
+The `createdAt` timestamp is converted to milliseconds for client-side sorting and display.
+</Note>
+
+### Updating Songs
+
+Existing songs can be edited via the admin panel:
+
+```javascript admin.html
+import { doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+await updateDoc(doc(db, "temas", songId), {
+    titulo: "Updated Title",
+    tonalidad: "Re menor"
+});
+```
+
+<Warning>
+Updates use `updateDoc()` which **merges** changes. Only specified fields are modified; others remain unchanged.
+</Warning>
+
+### Deleting Songs
+
+Songs can be removed from the catalog:
+
+```javascript admin.html
+import { doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+await deleteDoc(doc(db, "temas", songId));
+```
+
+## Data Validation
+
+### Client-Side Validation
+
+The admin panel validates data before submission:
+
+```javascript admin.html
+function validateData(data) {
+    if (!data.titulo) return "El título es obligatorio.";
+    if (!data.videoId) return "El ID/URL del video es obligatorio.";
+    if (data.inicio < 0) return "El segundo de inicio no puede ser negativo.";
+    return "";
+}
+```
+
+### Video ID Extraction
+
+The system automatically extracts IDs from full URLs:
+
+```javascript admin.html
+function extractVideoId(raw, fuente) {
+    const value = (raw || "").trim();
+    if (!value) return "";
+    if (!value.includes("http")) return value; // Already an ID
+
+    try {
+        const url = new URL(value);
+        if (fuente === "youtube") {
+            // Handle youtu.be/VIDEO_ID
+            if (url.hostname.includes("youtu.be")) 
+                return url.pathname.replace("/", "");
+            
+            // Handle youtube.com/watch?v=VIDEO_ID
+            const v = url.searchParams.get("v");
+            if (v) return v;
+            
+            // Handle youtube.com/embed/VIDEO_ID or /v/VIDEO_ID
+            const segments = url.pathname.split("/").filter(Boolean);
+            return segments[segments.length - 1] || value;
+        }
+        if (fuente === "drive") {
+            // Handle drive.google.com/file/d/FILE_ID/view
+            const match = value.match(/\/d\/([^\/]+)/);
+            if (match && match[1]) return match[1];
+            
+            // Handle drive.google.com/open?id=FILE_ID
+            const idParam = url.searchParams.get("id");
+            if (idParam) return idParam;
+        }
+    } catch {}
+    return value; // Return as-is if parsing fails
+}
+```
+
+<Accordion title="Supported URL Formats">
+**YouTube**:
+- `https://www.youtube.com/watch?v=FTV-9T8b05I`
+- `https://youtu.be/FTV-9T8b05I`
+- `https://www.youtube.com/embed/FTV-9T8b05I`
+- `FTV-9T8b05I` (direct ID)
+
+**Google Drive**:
+- `https://drive.google.com/file/d/1O55K7VysXG37LJdeyC-O96rysmQwTt_x/view`
+- `https://drive.google.com/open?id=1O55K7VysXG37LJdeyC-O96rysmQwTt_x`
+- `1O55K7VysXG37LJdeyC-O96rysmQwTt_x` (direct ID)
+</Accordion>
+
+## Filtering and Sorting
+
+### Multi-Criteria Filtering
+
+The admin panel implements client-side filtering:
+
+```javascript admin.html
+function applyFiltersAndRender() {
+    const q = normalizar(refs.search.value);  // Search query
+    const cat = refs.filterCategoria.value;   // Category filter
+    const src = refs.filterFuente.value;      // Source filter
+    const sortMode = refs.sort.value;         // Sort mode
+
+    filteredTemas = allTemas.filter(t => {
+        const matchesText = normalizar(t.titulo).includes(q)
+            || normalizar(t.artista).includes(q)
+            || normalizar(t.tonalidad).includes(q);
+        const matchesCat = cat === "all" || (t.categoria || "") === cat;
+        const matchesSrc = src === "all" || (t.fuente || "") === src;
+        return matchesText && matchesCat && matchesSrc;
+    });
+
+    // Sort results
+    filteredTemas.sort((a, b) => {
+        if (sortMode === "titulo-asc") 
+            return (a.titulo || "").toLowerCase().localeCompare((b.titulo || "").toLowerCase());
+        if (sortMode === "titulo-desc") 
+            return (b.titulo || "").toLowerCase().localeCompare((a.titulo || "").toLowerCase());
+        if (sortMode === "artista-asc") 
+            return (a.artista || "").toLowerCase().localeCompare((b.artista || "").toLowerCase());
+        return (b.createdAtMs || 0) - (a.createdAtMs || 0); // Most recent
+    });
+
+    renderTabla(filteredTemas);
+}
+```
+
+### Text Normalization
+
+Search is accent-insensitive and case-insensitive:
+
+```javascript admin.html
+function normalizar(texto) {
+    return (texto || "").toString().toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+}
+// "Cajamarquina" → "cajamarquina"
+// "Tonalidad: La Menor" → "tonalidad: la menor"
+```
+
+## Statistics and Analytics
+
+### Real-Time Stats
+
+The admin panel displays live statistics:
+
+```javascript admin.html
+function updateStats() {
+    refs.statTotal.textContent = allTemas.length;
+    refs.statYt.textContent = allTemas.filter(t => t.fuente === "youtube").length;
+    refs.statDrive.textContent = allTemas.filter(t => t.fuente === "drive").length;
+    refs.statCats.textContent = new Set(allTemas.map(t => t.categoria || "sin")).size;
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Total Songs" icon="music">
+    Total count of all songs in database
+  </Card>
+  <Card title="YouTube Sources" icon="youtube">
+    Count of songs hosted on YouTube
+  </Card>
+  <Card title="Drive Sources" icon="google-drive">
+    Count of songs hosted on Google Drive
+  </Card>
+  <Card title="Unique Categories" icon="tags">
+    Number of distinct category values
+  </Card>
+</CardGroup>
+
+## Data Export
+
+### CSV Export
+
+The admin panel can export filtered or full catalog to CSV:
+
+```javascript admin.html
+function exportCsv() {
+    const rows = filteredTemas.length ? filteredTemas : allTemas;
+    if (!rows.length) {
+        showStatus("No hay datos para exportar.", false);
+        return;
+    }
+
+    const headers = ["titulo", "artista", "tonalidad", "categoria", "fuente", "videoId", "inicio"];
+    const escapeCell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = [headers.join(",")]
+        .concat(rows.map(r => headers.map(h => escapeCell(r[h])).join(",")))
+        .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ripper-temas-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+```
+
+**Output format**:
+```csv
+titulo,artista,tonalidad,categoria,fuente,videoId,inicio
+"Ayer la vi a mi ex","Banda Jazz Perú Sunicancha","La menor","huayno","youtube","FTV-9T8b05I",29
+"Brindaré Por Ti","Banda Show La Huaranchal","La menor","huayno","youtube","JfLWXhriLik",577
+```
+
+## Firestore Security Rules
+
+<Warning>
+While not visible in the client code, Firestore Security Rules should be configured to:
+
+1. **Require authentication** for all reads/writes
+2. **Restrict writes** to `temas` collection to admin users only
+3. **Restrict session writes** to the authenticated user's own document
+4. **Validate data types** and required fields server-side
+
+Example rules:
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /temas/{temaId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth.token.email == 'admin@ripper.com';
+    }
+    match /sessions/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+```
+</Warning>
+
+## Performance Optimizations
+
+<CardGroup cols={2}>
+  <Card title="Client-Side Filtering" icon="filter">
+    All filtering/sorting done in-memory after initial fetch. No repeated queries.
+  </Card>
+  <Card title="IndexedDB Cache" icon="database">
+    Offline persistence means songs load instantly on repeat visits
+  </Card>
+  <Card title="Snapshot Listeners" icon="bell">
+    Session monitoring uses real-time listeners for instant eviction detection
+  </Card>
+  <Card title="Batch Operations" icon="layer-group">
+    Single `getDocs()` call fetches entire catalog. No N+1 queries.
+  </Card>
+</CardGroup>
+
+## Migration from Legacy Data
+
+The codebase includes a legacy `baseDeTemas` object in `js/temas.js` with hardcoded songs. This was the original data structure before Firestore:
+
+```javascript js/temas.js
+export const baseDeTemas = {
+    "1": { titulo: "Ayer la vi a mi ex", artista: "...", ... },
+    "2": { titulo: "Brindaré Por Ti", artista: "...", ... },
+    // ... 86 songs total
+};
+```
+
+<Note>
+This legacy data can be bulk-imported to Firestore using a migration script that loops through the object and calls `addDoc()` for each entry.
+</Note>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Firebase Setup" icon="fire" href="/technical/firebase-setup">
+    Learn about Firestore initialization and persistence
+  </Card>
+  <Card title="Authentication" icon="lock" href="/technical/authentication">
+    Understand how sessions collection is used for auth
+  </Card>
+</CardGroup>

@@ -1,0 +1,436 @@
+---
+title: Authentication
+description: Comprehensive guide to Ripper's authentication system, session management, and security features powered by Firebase.
+---
+
+## Overview
+
+Ripper uses **Firebase Authentication** with Cloud Firestore to provide secure, single-device session management. The authentication system is designed to protect premium content while ensuring a seamless user experience.
+
+## Firebase Configuration
+
+The platform is configured with Firebase v10.7.1 using ES6 module imports:
+
+```javascript firebase.js
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getFirestore, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { getAuth } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBu1KKK7YJsXoHbNNUXLBhV54b1UIS8OEw",
+  authDomain: "huaynos-6e527.firebaseapp.com",
+  projectId: "huaynos-6e527",
+  storageBucket: "huaynos-6e527.firebasestorage.app",
+  messagingSenderId: "374495999469",
+  appId: "1:374495999469:web:54dc33730a53f33e2a63e4"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+// Enable offline persistence for instant loading
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code == 'failed-precondition') {
+    console.warn("La persistencia falló: Múltiples pestañas abiertas.");
+  } else if (err.code == 'unimplemented') {
+    console.warn("El navegador no soporta persistencia de datos.");
+  }
+});
+
+export { auth, db };
+```
+
+<Note>
+  **IndexedDB Persistence** enables offline data caching, making subsequent page loads nearly instantaneous after the first visit.
+</Note>
+
+## Authentication Flow
+
+<Steps>
+  <Step title="User Enters Credentials">
+    The user provides their email and password through the login form:
+
+    ```javascript
+    const email = document.getElementById("email").value.trim();
+    const pass = document.getElementById("password").value;
+    ```
+
+    Input validation ensures:
+    - Email is not empty and properly formatted
+    - Password is not empty
+    - Error messages display for invalid input
+  </Step>
+
+  <Step title="Set Session Persistence">
+    Based on the "Remember me" checkbox, set appropriate persistence:
+
+    ```javascript
+    import { setPersistence, browserLocalPersistence, browserSessionPersistence } from "firebase-auth";
+
+    // Persistent session (survives browser restart)
+    await setPersistence(auth, browserLocalPersistence);
+
+    // OR Session-only (cleared when browser closes)
+    await setPersistence(auth, browserSessionPersistence);
+    ```
+
+    <Info>
+      **Local Persistence**: Session persists across browser restarts
+      
+      **Session Persistence**: Session cleared when browser/tab closes
+    </Info>
+  </Step>
+
+  <Step title="Firebase Sign In">
+    Authenticate with Firebase using email/password:
+
+    ```javascript
+    import { signInWithEmailAndPassword } from "firebase-auth";
+
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, pass);
+      // cred.user contains user information
+    } catch (e) {
+      // Handle authentication errors
+      const authErrors = {
+        "auth/invalid-credential": "Correo o contraseña incorrectos.",
+        "auth/user-not-found": "No existe una cuenta con ese correo.",
+        "auth/wrong-password": "Correo o contraseña incorrectos.",
+        "auth/too-many-requests": "Demasiados intentos. Intenta más tarde.",
+        "auth/invalid-email": "El formato del correo no es válido."
+      };
+      showError(authErrors[e.code] || "Acceso denegado. Verifica tus datos.");
+    }
+    ```
+  </Step>
+
+  <Step title="Claim Device Session">
+    **Critical Step**: Register the current device/browser as the active session:
+
+    ```javascript js/seguridad.js
+    import { doc, setDoc } from "firebase-firestore";
+
+    export async function reclamarSesion(db, userId) {
+      const deviceId = getDeviceId();
+      await setDoc(doc(db, "sessions", userId), {
+        deviceId,
+        claimedAt: Date.now()
+      }); // Overwrites previous session → kicks out other device
+    }
+    ```
+
+    This writes the current device ID to Firestore, effectively **signing out any other active sessions**.
+  </Step>
+
+  <Step title="Redirect to Home">
+    After successful authentication and session claiming:
+
+    ```javascript
+    window.location.replace("home.html");
+    ```
+
+    Using `replace()` prevents the user from navigating back to the login page via browser back button.
+  </Step>
+</Steps>
+
+## Single-Device Session Management
+
+Ripper enforces a **one device per account** policy to protect premium content from sharing.
+
+### Device ID Generation
+
+Each browser/device gets a unique persistent identifier:
+
+```javascript js/seguridad.js
+export const getDeviceId = () => {
+  let id = localStorage.getItem("rip_deviceId");
+  if (!id) {
+    id = 'dev_' + Math.random().toString(36).substr(2, 9) + Date.now();
+    localStorage.setItem("rip_deviceId", id);
+  }
+  return id;
+};
+```
+
+<Warning>
+  Device IDs are stored in **localStorage**, making them persistent across sessions but unique per browser profile.
+</Warning>
+
+### Session Claiming (Login)
+
+When a user logs in, `reclamarSesion()` is called **once**:
+
+```javascript
+// Called ONLY during login
+export async function reclamarSesion(db, userId) {
+  const deviceId = getDeviceId();
+  await setDoc(doc(db, "sessions", userId), {
+    deviceId,
+    claimedAt: Date.now()
+  }); // Complete overwrite → expels previous device
+}
+```
+
+**What happens**:
+1. New device ID is written to Firestore `/sessions/{userId}`
+2. Previous device ID is overwritten
+3. Other device detects the change and triggers expulsion
+
+### Session Monitoring (Protected Pages)
+
+On all protected pages (home, player, etc.), `vigilarSesion()` runs:
+
+```javascript js/seguridad.js
+export function vigilarSesion(auth, db, contenedorId) {
+  const deviceId = getDeviceId();
+  let unsub = null;
+  let expulsado = false;
+
+  auth.onAuthStateChanged((user) => {
+    if (!user) {
+      window.location.href = "index.html";
+      return;
+    }
+
+    const sessionRef = doc(db, "sessions", user.uid);
+
+    // LISTEN for changes (never writes)
+    unsub = onSnapshot(sessionRef, (snap) => {
+      if (expulsado) return;
+      if (!snap.exists()) return;
+
+      const data = snap.data();
+
+      // If stored deviceId doesn't match ours → we've been kicked out
+      if (data.deviceId && data.deviceId !== deviceId) {
+        expulsado = true;
+        if (unsub) { unsub(); unsub = null; }
+        const wrapper = document.getElementById(contenedorId);
+        manejarExpulsion(wrapper, auth);
+      }
+    });
+  });
+}
+```
+
+<Info>
+  **Key Architecture**: 
+  - `reclamarSesion()` **writes** session data (called only at login)
+  - `vigilarSesion()` **reads/listens** to session data (called on every protected page)
+  - This prevents devices from fighting over the session
+</Info>
+
+### Expulsion Flow
+
+When a device detects it's been signed out:
+
+```javascript
+export function manejarExpulsion(contenedor, auth) {
+  // Replace page content with expulsion notice
+  contenedor.innerHTML = `
+    <div class="expulsion-card">
+      <div style="font-size:3rem;">🚫</div>
+      <h3>Sesión desplazada</h3>
+      <p>Tu cuenta fue abierta en otro dispositivo o navegador.</p>
+      <div class="aviso-importante">
+        ⚠️ <strong>Recuerda:</strong> Solo se permite <b>un dispositivo activo</b> por cuenta a la vez.
+      </div>
+      <p>Cerrando sesión en <span id="seg-cuenta">10</span>s...</p>
+    </div>`;
+
+  // 10-second countdown
+  let seg = 10;
+  const t = setInterval(async () => {
+    seg--;
+    const el = document.getElementById("seg-cuenta");
+    if (el) el.textContent = seg;
+    if (seg <= 0) {
+      clearInterval(t);
+      await signOut(auth);
+      window.location.href = "index.html";
+    }
+  }, 1000);
+}
+```
+
+## Authentication State Management
+
+Firebase provides real-time authentication state:
+
+```javascript
+import { onAuthStateChanged } from "firebase-auth";
+
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    // User is signed in
+    console.log("User ID:", user.uid);
+    console.log("Email:", user.email);
+    
+    // Claim session and redirect
+    await reclamarSesion(db, user.uid);
+    window.location.replace("home.html");
+  } else {
+    // User is signed out
+    if (!window.location.pathname.includes("index.html")) {
+      window.location.href = "index.html";
+    }
+  }
+});
+```
+
+<Tip>
+  Use `onAuthStateChanged()` to handle automatic redirects when sessions expire or users log out.
+</Tip>
+
+## Logout Flow
+
+Users can sign out manually via the logout button:
+
+```javascript
+export async function globalLogout(auth) {
+  await signOut(auth);
+  window.location.href = "index.html";
+}
+
+// Usage
+document.getElementById("btnLogOut").onclick = () => globalLogout(auth);
+```
+
+**What happens**:
+1. Firebase clears authentication state
+2. Session listener on other pages detects signed-out state
+3. User is redirected to login page
+4. Session document in Firestore remains (preserves last device ID)
+
+## Security Features
+
+<CardGroup cols={2}>
+  <Card title="Email/Password Auth" icon="envelope">
+    Secure Firebase Authentication with encrypted password storage and HTTPS-only transmission.
+  </Card>
+
+  <Card title="Single-Device Enforcement" icon="mobile">
+    Automatic session expulsion prevents account sharing and unauthorized access.
+  </Card>
+
+  <Card title="Real-time Monitoring" icon="eye">
+    Firestore snapshots detect session changes instantly across all devices.
+  </Card>
+
+  <Card title="Persistent Device IDs" icon="fingerprint">
+    localStorage-based device identification survives page refreshes but remains browser-specific.
+  </Card>
+</CardGroup>
+
+## Admin Access
+
+Special privileges for the admin account:
+
+```javascript
+const ADMIN_EMAIL = "admin@ripper.com";
+
+onAuthStateChanged(auth, (user) => {
+  if (user && user.email === ADMIN_EMAIL) {
+    // Show admin panel button in header
+    const zone = document.getElementById("admin-zone");
+    zone.innerHTML = `<a href="admin.html" class="btn-nav btn-admin">
+      <svg>...</svg> <span>Admin</span>
+    </a>`;
+  }
+});
+```
+
+Admin users can access `admin.html` for platform management.
+
+## Error Handling
+
+Comprehensive error handling for authentication failures:
+
+<CodeGroup>
+```javascript User-Friendly Messages
+const authErrors = {
+  "auth/invalid-credential": "Correo o contraseña incorrectos.",
+  "auth/user-not-found": "No existe una cuenta con ese correo.",
+  "auth/wrong-password": "Correo o contraseña incorrectos.",
+  "auth/too-many-requests": "Demasiados intentos. Intenta más tarde.",
+  "auth/invalid-email": "El formato del correo no es válido."
+};
+
+function showError(message) {
+  err.textContent = message;
+  err.style.display = "block";
+}
+```
+
+```javascript Network Errors
+try {
+  await signInWithEmailAndPassword(auth, email, pass);
+} catch (e) {
+  if (e.code === 'auth/network-request-failed') {
+    showError("Error de conexión. Verifica tu internet.");
+  } else {
+    showError(authErrors[e.code] || "Acceso denegado.");
+  }
+}
+```
+</CodeGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Use HTTPS">
+    Firebase Authentication requires HTTPS in production. Never deploy over HTTP.
+  </Accordion>
+
+  <Accordion title="Validate Input Client-Side">
+    Check email format and password presence before calling Firebase to reduce unnecessary API calls.
+  </Accordion>
+
+  <Accordion title="Handle All Error Codes">
+    Provide user-friendly messages for all Firebase error codes to improve UX.
+  </Accordion>
+
+  <Accordion title="Use window.location.replace() for Post-Login Redirects">
+    Prevents users from accidentally returning to the login page via the back button.
+  </Accordion>
+
+  <Accordion title="Clear Error Messages on Retry">
+    Reset error display when user attempts login again for a cleaner experience.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+### "Session Already Active" Warning
+
+If you see the expulsion screen unexpectedly:
+
+1. **Check browser localStorage**: Clear `rip_deviceId` to generate a new device ID
+2. **Multiple tabs**: Close all Ripper tabs and log in with only one tab open
+3. **Shared account**: Ensure no one else is using your account simultaneously
+
+### Persistence Not Working
+
+```javascript
+// Check if persistence is supported
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code == 'unimplemented') {
+    console.warn("Browser doesn't support persistence");
+    // Fallback: data will load from network each time
+  }
+});
+```
+
+### Login Button Stuck on "VERIFICANDO..."
+
+This indicates a network or Firebase error:
+
+1. Check browser console for error messages
+2. Verify internet connection
+3. Confirm Firebase project is active and not over quota
+4. Try clearing browser cache and cookies
+
+<Warning>
+  If authentication issues persist, contact the administrator via WhatsApp at **+51 933 287 274**.
+</Warning>

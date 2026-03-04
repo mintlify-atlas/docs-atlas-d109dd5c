@@ -1,0 +1,281 @@
+---
+title: 'Browsing Music'
+description: 'Learn how to explore, search, and filter your music collection in Ripper'
+icon: 'music'
+---
+
+The **Lista de Temas** (Music Browser) page provides a powerful interface for exploring your Peruvian huayno music collection. Access this page by clicking the "Explorar" button from the home dashboard or navigate directly to `lista-temas.html`.
+
+## Accessing the Music Browser
+
+<Steps>
+  <Step title="Navigate from Home">
+    From the home page (`home.html`), click the red "▶ Explorar" button in the hero section to access the music catalog.
+  </Step>
+  
+  <Step title="Select Category">
+    The music browser loads content based on the `cat` URL parameter. By default, it displays the `huayno` category:
+    
+    ```javascript
+    const params = new URLSearchParams(window.location.search);
+    const catActual = params.get('cat') || 'huayno';
+    ```
+  </Step>
+  
+  <Step title="Browse Your Collection">
+    All music tracks for the selected category are displayed in a responsive grid layout with color-coded cards based on tonality.
+  </Step>
+</Steps>
+
+## Understanding the Interface
+
+### Hero Section
+
+The top of the page features a mini hero banner with key information:
+
+- **Title**: "Explora tus temas" (Explore your tracks)
+- **Description**: Explains the filtering and browsing capabilities
+- **Feature chips**: Highlights "Catálogo premium", "Orden tonal", and "Acceso rápido"
+
+### Search Bar
+
+The sticky search bar remains visible as you scroll and allows instant filtering:
+
+```html
+<input type="text" id="buscador" class="buscador" 
+       placeholder="🔎 Buscar por título o artista...">
+```
+
+<Tip>
+The search bar uses **real-time filtering** - results update as you type without requiring you to press Enter.
+</Tip>
+
+## Searching and Filtering
+
+### Real-Time Search
+
+The search functionality filters tracks by both title and artist name:
+
+```javascript
+const normalizar = t => t ? t.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase() : "";
+
+function renderFiltrado(filtro = "") {
+    const txt = normalizar(filtro);
+    const lista = temasCache
+        .filter(t => normalizar(t.titulo).includes(txt) || normalizar(t.artista).includes(txt))
+        // ... sorting logic
+}
+```
+
+Key features:
+- **Accent-insensitive**: Searches normalize Unicode characters, so "Jose" matches "José"
+- **Case-insensitive**: All comparisons are converted to lowercase
+- **Multi-field**: Searches both track title (`titulo`) and artist name (`artista`)
+
+### How to Search
+
+<AccordionGroup>
+  <Accordion title="Search by Track Title">
+    Simply type any part of the track name. For example:
+    - Type "amor" to find all tracks with "amor" in the title
+    - Partial matches work: "hui" will find "Huichinga", "Huilca", etc.
+  </Accordion>
+  
+  <Accordion title="Search by Artist">
+    Type the artist or band name:
+    - "Pastorita" finds all tracks by Pastorita Huaracina
+    - Works with partial names too
+  </Accordion>
+  
+  <Accordion title="Clear Search">
+    Delete all text from the search bar to show the complete catalog again.
+  </Accordion>
+</AccordionGroup>
+
+## Music Card Display
+
+### Tonal Organization
+
+Tracks are automatically sorted by musical tonality using this order:
+
+```javascript
+const ORDEN_NOTAS = { do:1, re:2, mi:3, fa:4, sol:5, la:6, si:7 };
+```
+
+The sorting logic:
+1. **Primary sort**: By note (do, re, mi, fa, sol, la, si)
+2. **Secondary sort**: Major keys before minor keys
+3. **Tertiary sort**: Alphabetically by track title
+
+### Color-Coded Cards
+
+Each track card is color-coded based on its tonality:
+
+| Tonality | Color RGB | Visual Effect |
+|----------|-----------|---------------|
+| Do (C) | `229,9,20` | Red |
+| Re (D) | `255,123,0` | Orange |
+| Mi (E) | `255,196,0` | Yellow |
+| Fa (F) | `33,198,131` | Green |
+| Sol (G) | `22,163,255` | Blue |
+| La (A) | `112,86,255` | Purple |
+| Si (B) | `228,79,227` | Magenta |
+
+The color is applied through CSS classes:
+
+```javascript
+const notaBase = tonalidadRaw.split(" ")[0] || "";
+const claseNota = ["do", "re", "mi", "fa", "sol", "la", "si"].includes(notaBase) 
+    ? `tone-${notaBase}` : "";
+```
+
+### Card Information
+
+Each music card displays:
+
+```html
+<span class="titulo">${t.titulo||"Sin título"}</span>
+<div class="artista-sub">${t.artista||"Artista"}</div>
+<span class="tono-tag">${t.tonalidad||"--"}</span>
+```
+
+- **Track title** (large, bold)
+- **Artist name** (smaller, lighter color)
+- **Tonality badge** (bottom, with mode indication)
+
+<Note>
+Minor keys are displayed with a **dashed border** on the tonality badge to distinguish them from major keys.
+</Note>
+
+## Opening a Track
+
+Click any card to open the track in the reproductor (player):
+
+```javascript
+a.href = `reproductor.html?id=${t.id}&cat=${catActual}`;
+```
+
+The link preserves:
+- **Track ID**: Unique identifier for the song
+- **Category**: Current category context for easy navigation back
+
+## Navigation
+
+### Header Controls
+
+- **Volver (Back)**: Returns to the previous page (`home.html`)
+- **RIPPER logo**: Click to return to home dashboard
+- **Cerrar Sesión (Logout)**: Sign out of your account
+
+### Responsive Grid
+
+The grid automatically adjusts to screen size:
+
+```css
+.grid-huaynos {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px;
+}
+```
+
+- **Desktop**: Multiple columns based on screen width
+- **Tablet**: Fewer columns with maintained spacing
+- **Mobile**: Single or dual column layout
+
+## State Messages
+
+The browser displays contextual messages:
+
+### Loading State
+```html
+<p class="state-msg">Cargando...</p>
+```
+Shown while fetching tracks from Firestore.
+
+### Empty Results
+```html
+<p class="state-msg">Sin resultados.</p>
+```
+Displayed when search returns no matches.
+
+### Error State
+```html
+<p class="state-msg error">Error de conexión.</p>
+```
+Shown if database connection fails.
+
+## Data Loading
+
+Tracks are loaded from Firestore on page load:
+
+```javascript
+async function cargarTemas() {
+    listaDiv.innerHTML = `<p class="state-msg">Cargando...</p>`;
+    try {
+        const snap = await getDocs(
+            query(collection(db, "temas"), 
+            where("categoria","==",catActual))
+        );
+        temasCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderFiltrado();
+    } catch(e) {
+        console.error(e);
+        listaDiv.innerHTML = `<p class="state-msg error">Error de conexión.</p>`;
+    }
+}
+```
+
+<Warning>
+The browser requires an active internet connection to load tracks from the Firestore database. Offline browsing is not currently supported.
+</Warning>
+
+## Performance Features
+
+### Client-Side Filtering
+
+All filtering happens in the browser after initial load:
+- Tracks are cached in `temasCache` array
+- Search filtering doesn't require additional database queries
+- Instant results as you type
+
+### Sticky Elements
+
+Two elements remain visible while scrolling:
+
+1. **Header** (top: 0): Navigation and logout
+2. **Search bar** (top: 84px): Always accessible for filtering
+
+```css
+.site-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}
+
+.buscador-wrap {
+    position: sticky;
+    top: 84px;
+    z-index: 18;
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Search Liberally" icon="magnifying-glass">
+    The search is fast and accent-insensitive. Don't hesitate to search frequently.
+  </Card>
+  
+  <Card title="Notice Color Patterns" icon="palette">
+    Learn the color coding to quickly identify tonalities in your collection.
+  </Card>
+  
+  <Card title="Explore by Category" icon="folder-open">
+    Use the `cat` parameter in the URL to browse different music categories.
+  </Card>
+  
+  <Card title="Track Organization" icon="arrow-down-a-z">
+    Tracks are pre-sorted by tonality - use this to find songs in specific keys.
+  </Card>
+</CardGroup>

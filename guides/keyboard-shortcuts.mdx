@@ -1,0 +1,471 @@
+---
+title: 'Keyboard Shortcuts'
+description: 'Complete reference for Ripper keyboard shortcuts and hotkeys'
+icon: 'keyboard'
+---
+
+Ripper includes comprehensive keyboard shortcuts for efficient player control without using the mouse. These shortcuts work on the **reproductor** (player) page for YouTube videos.
+
+<Note>
+Keyboard shortcuts are **only active for YouTube videos**. Google Drive videos rely on native player controls.
+</Note>
+
+## Quick Reference
+
+The player displays a helpful tip at the bottom:
+
+```html
+<p class="shortcuts-tip">
+    Atajos: <strong>Espacio</strong> play/pausa, 
+    <strong>←/→</strong> ±5s, 
+    <strong>R</strong> reiniciar, 
+    <strong>F</strong> pantalla completa.
+</p>
+```
+
+## Complete Shortcut List
+
+<CardGroup cols={2}>
+  <Card title="Space" icon="play">
+    **Play / Pause**
+    
+    Toggle video playback state
+  </Card>
+  
+  <Card title="← Left Arrow" icon="backward">
+    **Seek -5 seconds**
+    
+    Jump backward 5 seconds
+  </Card>
+  
+  <Card title="→ Right Arrow" icon="forward">
+    **Seek +5 seconds**
+    
+    Jump forward 5 seconds
+  </Card>
+  
+  <Card title="R" icon="rotate-left">
+    **Restart**
+    
+    Return to track start position and play
+  </Card>
+  
+  <Card title="F" icon="expand">
+    **Fullscreen Toggle**
+    
+    Enter or exit fullscreen mode
+  </Card>
+</CardGroup>
+
+## Implementation Details
+
+### Keyboard Event Listener
+
+All shortcuts are implemented through a single event listener:
+
+```javascript
+document.addEventListener("keydown", (e) => {
+    const activeTag = (document.activeElement?.tagName || "").toLowerCase();
+    if (["input", "textarea", "select"].includes(activeTag)) return;
+
+    if (e.code === "Space") {
+        e.preventDefault();
+        window.togglePlay();
+    }
+    if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        window.seek(-5);
+    }
+    if (e.key === "ArrowRight") {
+        e.preventDefault();
+        window.seek(5);
+    }
+    if (e.key.toLowerCase() === "r") {
+        e.preventDefault();
+        window.reiniciar();
+    }
+    if (e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        btnFullscreen.click();
+    }
+});
+```
+
+### Input Field Protection
+
+Shortcuts are **disabled when typing** in form fields:
+
+```javascript
+const activeTag = (document.activeElement?.tagName || "").toLowerCase();
+if (["input", "textarea", "select"].includes(activeTag)) return;
+```
+
+This prevents:
+- Accidental playback toggle when typing a space in search
+- Video seeking when using arrow keys in text fields
+- Unwanted restarts when entering "r" in forms
+
+<Tip>
+This smart detection means you can safely use the search bar or any other input field without triggering player shortcuts.
+</Tip>
+
+## Shortcut Details
+
+### Space - Play/Pause Toggle
+
+**Key Code**: `Space`
+
+**Function**:
+```javascript
+window.togglePlay = () => {
+    if (!isYouTube || !window.player) return;
+    playing ? window.player.pauseVideo() : window.player.playVideo();
+};
+```
+
+**Behavior**:
+- If playing → pauses video
+- If paused → starts playback
+- Updates play button icon automatically
+- Shows/hides overlay based on state
+
+**State Management**:
+```javascript
+function ytStateChange(e) {
+    const btn = document.getElementById("btn-play");
+    if (e.data === YT.PlayerState.PLAYING) {
+        btn.classList.add("playing");
+        playing = true;
+        document.getElementById("yt-overlay").style.display = "none";
+    } else if (e.data === YT.PlayerState.PAUSED) {
+        btn.classList.remove("playing");
+        playing = false;
+        if (!ignorarPausa) document.getElementById("yt-overlay").style.display = "flex";
+    }
+}
+```
+
+### Arrow Keys - Seek Navigation
+
+**Left Arrow** (ArrowLeft): Seek backward 5 seconds
+**Right Arrow** (ArrowRight): Seek forward 5 seconds
+
+**Function**:
+```javascript
+window.seek = (s) => {
+    if (isYouTube && window.player) {
+        window.player.seekTo(window.player.getCurrentTime() + s, true);
+    }
+};
+```
+
+**Parameters**:
+- `s`: Number of seconds to seek (negative for backward, positive for forward)
+- Arrow keys use ±5 second intervals
+- Seek buttons provide additional intervals: ±1s, ±10s
+
+<Steps>
+  <Step title="Current Time Retrieved">
+    `window.player.getCurrentTime()` gets the current playback position
+  </Step>
+  
+  <Step title="Offset Applied">
+    The seek value (±5) is added to current time
+  </Step>
+  
+  <Step title="Player Seeks">
+    `seekTo()` jumps to the new position with `true` for immediate seeking
+  </Step>
+</Steps>
+
+### R - Restart Track
+
+**Key**: `r` or `R` (case-insensitive)
+
+**Function**:
+```javascript
+window.reiniciar = () => {
+    if (isYouTube && window.player) {
+        window.player.seekTo(inicio, true);
+        window.player.playVideo();
+    }
+};
+```
+
+**Start Position** (`inicio`):
+
+1. **URL parameter** takes precedence:
+   ```javascript
+   const forcedStart = Number(params.get("t") || "0");
+   ```
+
+2. **Database field** (`temaData.inicio`) if no URL parameter
+
+3. **Default to 0** if neither exists
+
+```javascript
+inicio = (!Number.isNaN(forcedStart) && forcedStart > 0) 
+    ? forcedStart 
+    : (temaData.inicio || 0);
+```
+
+**Behavior**:
+- Seeks to the designated start time
+- Automatically starts playback
+- Useful for practicing from a specific point repeatedly
+
+<Warning>
+Restart always **starts playing** automatically. It does not maintain the current pause/play state.
+</Warning>
+
+### F - Fullscreen Toggle
+
+**Key**: `f` or `F` (case-insensitive)
+
+**Function**:
+```javascript
+btnFullscreen.addEventListener("click", async () => {
+    const container = document.getElementById("video-container");
+    if (!document.fullscreenElement) {
+        try {
+            await container.requestFullscreen();
+        } catch (e) {
+            console.error(e);
+        }
+    } else {
+        await document.exitFullscreen();
+    }
+});
+```
+
+**Target Element**:
+```html
+<div id="video-container">
+    <div id="player"></div>
+    <!-- overlays and controls -->
+</div>
+```
+
+**Behavior**:
+- First press: Enter fullscreen mode
+- Second press: Exit fullscreen mode
+- Also exits with ESC key (browser default)
+- Control panel remains visible in fullscreen
+
+## Workflow Examples
+
+### Example 1: Learning a Difficult Passage
+
+<Steps>
+  <Step title="Navigate to Section">
+    Use **→ Right Arrow** to skip to the difficult part (or click seek +10s button)
+  </Step>
+  
+  <Step title="Play and Observe">
+    Press **Space** to play and watch the passage
+  </Step>
+  
+  <Step title="Repeat Immediately">
+    Press **R** to restart from the beginning and try along
+  </Step>
+  
+  <Step title="Fine-Tune Position">
+    Use **← Left Arrow** or **→ Right Arrow** to adjust starting point by 5 seconds
+  </Step>
+  
+  <Step title="Practice Loop">
+    Repeat: **Space** to pause when needed, **R** to restart
+  </Step>
+</Steps>
+
+### Example 2: Focused Practice Session
+
+<Steps>
+  <Step title="Enter Focus Mode">
+    Press **F** to enter fullscreen for distraction-free practice
+  </Step>
+  
+  <Step title="Control Playback">
+    Use **Space** to play/pause as you practice along
+  </Step>
+  
+  <Step title="Navigate with Arrows">
+    Use **← / →** to review specific measures
+  </Step>
+  
+  <Step title="Quick Restarts">
+    Press **R** whenever you want to start over
+  </Step>
+  
+  <Step title="Exit Focus Mode">
+    Press **F** or **ESC** to exit fullscreen
+  </Step>
+</Steps>
+
+### Example 3: Teaching/Demonstration
+
+<Steps>
+  <Step title="Start Fullscreen">
+    Press **F** for better visibility on projector/large screen
+  </Step>
+  
+  <Step title="Pause for Explanation">
+    Press **Space** to pause at teaching points
+  </Step>
+  
+  <Step title="Rewind Key Sections">
+    Use **← Left Arrow** multiple times to go back
+  </Step>
+  
+  <Step title="Repeat Demonstrations">
+    Press **R** to show the section again from the start
+  </Step>
+</Steps>
+
+## Combining Shortcuts with Mouse Controls
+
+### Hybrid Workflow
+
+You can mix keyboard shortcuts with mouse/touch controls:
+
+| Task | Keyboard | Mouse Alternative |
+|------|----------|-------------------|
+| Play/Pause | **Space** | Click red play button |
+| Seek ±5s | **← / →** | Click ±5s buttons |
+| Seek ±1s | N/A | Click ±1s buttons |
+| Seek ±10s | N/A | Click ±10s buttons |
+| Restart | **R** | Click "Reiniciar" button |
+| Fullscreen | **F** | Click "Pantalla" button |
+| Change Speed | N/A | Use speed dropdown |
+| Copy Link | N/A | Click "Copiar link" button |
+
+<Tip>
+Keyboard shortcuts are fastest for **play/pause**, **seeking**, and **restart**. Use mouse for **speed changes** and **fine ±1s adjustments**.
+</Tip>
+
+## Browser Compatibility
+
+### Keyboard Events
+
+All shortcuts use standard `keydown` events:
+
+- ✅ Chrome/Edge: Full support
+- ✅ Firefox: Full support
+- ✅ Safari: Full support
+- ✅ Mobile browsers: Limited (no physical keyboard)
+
+### Fullscreen API
+
+Fullscreen uses the standard Fullscreen API:
+
+```javascript
+await container.requestFullscreen(); // Enter
+await document.exitFullscreen();     // Exit
+```
+
+**Support**:
+- ✅ Modern browsers: Full support
+- ⚠️ Older browsers: May require vendor prefixes
+- ❌ Some mobile browsers: Restricted or disabled
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Shortcuts Not Working">
+    **Possible causes:**
+    
+    1. **Video source is Google Drive**: Shortcuts only work for YouTube videos
+       ```javascript
+       if (!isYouTube || !window.player) return;
+       ```
+    
+    2. **Input field is focused**: Click outside any input/textarea/select field
+       ```javascript
+       if (["input", "textarea", "select"].includes(activeTag)) return;
+       ```
+    
+    3. **Player not ready**: Wait for loading screen to disappear
+    
+    4. **Browser tab in background**: Focus the Ripper tab
+  </Accordion>
+  
+  <Accordion title="Fullscreen Not Entering">
+    **Solutions:**
+    
+    1. Ensure browser allows fullscreen (some browsers block it)
+    2. Try clicking the "Pantalla" button instead
+    3. Check browser permissions/settings
+    4. Try a different browser if persistent
+    
+    **Mobile note**: Some mobile browsers restrict fullscreen API
+  </Accordion>
+  
+  <Accordion title="Space Bar Scrolls Page Instead">
+    **Cause**: Default browser behavior when page has scrollable content
+    
+    **Solution**: This is prevented by `e.preventDefault()` in the code:
+    ```javascript
+    if (e.code === "Space") {
+        e.preventDefault();
+        window.togglePlay();
+    }
+    ```
+    
+    If scrolling still occurs, click the player area first to ensure focus.
+  </Accordion>
+</AccordionGroup>
+
+## Accessibility Considerations
+
+### Screen Readers
+
+Buttons include proper ARIA labels:
+
+```html
+<button id="btn-play" onclick="togglePlay()" aria-label="Reproducir o pausar">
+```
+
+```html
+<select id="speed-select" class="speed-select" 
+        aria-label="Velocidad de reproducción">
+```
+
+### Keyboard-Only Navigation
+
+All controls are accessible via keyboard:
+
+- **Tab**: Navigate between controls
+- **Enter/Space**: Activate focused button
+- **Arrow keys**: Adjust select options
+- **Custom shortcuts**: Direct actions without tabbing
+
+### Visual Feedback
+
+<CardGroup cols={2}>
+  <Card title="Button States" icon="circle-dot">
+    Hover and active states provide visual feedback for all button interactions
+  </Card>
+  
+  <Card title="Playing Indicator" icon="play">
+    Play button shows distinct "playing" vs "paused" states with icon swap
+  </Card>
+  
+  <Card title="Progress Bar" icon="chart-line">
+    Visual progress fill updates every 500ms during playback
+  </Card>
+  
+  <Card title="Time Display" icon="clock">
+    Current and total time shown in MM:SS format
+  </Card>
+</CardGroup>
+
+## Summary
+
+Ripper's keyboard shortcuts enable efficient, hands-free control of music playback:
+
+- **Space**: Quick play/pause toggle
+- **Arrow keys**: Fast navigation through the track
+- **R**: Instant restart for repetitive practice
+- **F**: Fullscreen for focused work
+
+Master these shortcuts to streamline your practice workflow and minimize mouse dependency while learning Peruvian huayno music.

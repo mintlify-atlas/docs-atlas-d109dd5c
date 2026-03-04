@@ -1,0 +1,407 @@
+---
+title: "Video Sources"
+description: "Understanding and configuring YouTube and Google Drive video sources in Ripper"
+---
+
+Ripper supports two video platforms for streaming Peruvian huayno music: YouTube and Google Drive. Each source has different requirements and embedding methods.
+
+## Supported Video Sources
+
+### YouTube
+
+YouTube is the primary video source for most tracks in Ripper.
+
+<ParamField path="fuente" type="string" default="youtube">
+  Set to `"youtube"` for YouTube videos
+</ParamField>
+
+<ParamField path="videoId" type="string" required>
+  The YouTube video ID (e.g., `"FTV-9T8b05I"` from `https://youtube.com/watch?v=FTV-9T8b05I`)
+</ParamField>
+
+**Example YouTube track:**
+
+```javascript js/temas.js
+{
+  titulo: "Ayer la vi a mi ex",
+  artista: "Banda Jazz Perú Sunicancha",
+  tonalidad: "La menor",
+  videoId: "FTV-9T8b05I",
+  inicio: 29,
+  categoria: "huayno",
+  fuente: "youtube"
+}
+```
+
+### Google Drive
+
+Google Drive is used for videos that may not be available on YouTube or require private hosting.
+
+<ParamField path="fuente" type="string">
+  Set to `"drive"` for Google Drive videos
+</ParamField>
+
+<ParamField path="videoId" type="string" required>
+  The Google Drive file ID (e.g., `"1O55K7VysXG37LJdeyC-O96rysmQwTt_x"` from `https://drive.google.com/file/d/1O55K7VysXG37LJdeyC-O96rysmQwTt_x/view`)
+</ParamField>
+
+**Example Google Drive track:**
+
+```javascript js/temas.js
+{
+  titulo: "Viaje de Amor",
+  artista: "Banda Orquesta Corazón de Huandoval",
+  tonalidad: "La menor",
+  videoId: "1O55K7VysXG37LJdeyC-O96rysmQwTt_x",
+  inicio: 0,
+  categoria: "huayno",
+  fuente: "drive"
+}
+```
+
+## Extracting Video IDs
+
+Ripper automatically extracts video IDs from full URLs in the admin panel.
+
+### YouTube URL Extraction
+
+The system supports multiple YouTube URL formats:
+
+```javascript admin.html
+function extractVideoId(raw, fuente) {
+    const value = (raw || "").trim();
+    if (!value) return "";
+    if (!value.includes("http")) return value;  // Already an ID
+
+    try {
+        const url = new URL(value);
+        if (fuente === "youtube") {
+            // youtu.be short links
+            if (url.hostname.includes("youtu.be")) 
+                return url.pathname.replace("/", "");
+            
+            // youtube.com watch links
+            const v = url.searchParams.get("v");
+            if (v) return v;
+            
+            // youtube.com embed or other formats
+            const segments = url.pathname.split("/").filter(Boolean);
+            return segments[segments.length - 1] || value;
+        }
+    } catch {}
+    return value;
+}
+```
+
+**Supported YouTube URL formats:**
+
+- `https://youtube.com/watch?v=FTV-9T8b05I` → `FTV-9T8b05I`
+- `https://youtu.be/FTV-9T8b05I` → `FTV-9T8b05I`
+- `https://youtube.com/embed/FTV-9T8b05I` → `FTV-9T8b05I`
+- `FTV-9T8b05I` → `FTV-9T8b05I` (already an ID)
+
+### Google Drive URL Extraction
+
+Google Drive URLs use a regex pattern to extract the file ID:
+
+```javascript admin.html
+if (fuente === "drive") {
+    // Extract from /d/{fileId}/ pattern
+    const match = value.match(/\/d\/([^/]+)/);
+    if (match && match[1]) return match[1];
+    
+    // Extract from ?id={fileId} parameter
+    const idParam = url.searchParams.get("id");
+    if (idParam) return idParam;
+}
+```
+
+**Supported Google Drive URL formats:**
+
+- `https://drive.google.com/file/d/1O55K7VysXG37LJdeyC-O96rysmQwTt_x/view` → `1O55K7VysXG37LJdeyC-O96rysmQwTt_x`
+- `https://drive.google.com/open?id=1O55K7VysXG37LJdeyC-O96rysmQwTt_x` → `1O55K7VysXG37LJdeyC-O96rysmQwTt_x`
+
+### Auto-Extraction on Blur
+
+When you paste a URL and move to the next field, the system automatically extracts the ID:
+
+```javascript admin.html
+refs.videoId.addEventListener("blur", () => {
+    if (!refs.videoId.value.trim()) return;
+    refs.videoId.value = extractVideoId(refs.videoId.value, refs.fuente.value);
+});
+```
+
+### Manual Extraction Button
+
+Click **"Extraer ID de URL"** to manually trigger extraction:
+
+```javascript admin.html
+document.getElementById("btnAutoId").onclick = () => {
+    if (!refs.videoId.value.trim()) {
+        showStatus("Pega primero un ID o URL en el campo de video.", false);
+        return;
+    }
+    refs.videoId.value = extractVideoId(refs.videoId.value, refs.fuente.value);
+    showStatus("✓ ID extraído.", true);
+};
+```
+
+## Video Player Implementation
+
+The reproductor (player page) handles both video sources with different embedding strategies.
+
+### YouTube Embedding
+
+<Note>
+  YouTube videos are loaded using the YouTube IFrame Player API for better control and autoplay.
+</Note>
+
+While the specific player implementation isn't fully visible in the admin source, YouTube videos typically use:
+
+```html
+<iframe 
+  src="https://www.youtube.com/embed/{videoId}?start={inicio}&autoplay=1" 
+  frameborder="0" 
+  allowfullscreen>
+</iframe>
+```
+
+The `inicio` parameter allows videos to start at a specific timestamp:
+
+```javascript
+// Track with inicio=29 starts playback at 29 seconds
+{
+  videoId: "FTV-9T8b05I",
+  inicio: 29,
+  fuente: "youtube"
+}
+```
+
+### Google Drive Embedding
+
+Google Drive videos use the Drive preview embed URL:
+
+```html
+<iframe 
+  src="https://drive.google.com/file/d/{videoId}/preview" 
+  frameborder="0" 
+  allowfullscreen>
+</iframe>
+```
+
+<Warning>
+  Google Drive videos must be set to "Anyone with the link can view" for public embedding to work. Private videos will fail to load.
+</Warning>
+
+## Start Time Configuration
+
+The `inicio` field specifies when playback should begin (in seconds):
+
+<ParamField path="inicio" type="number" default="0">
+  Start time in seconds. Useful when the actual music doesn't begin at the start of the video.
+</ParamField>
+
+**Common use cases:**
+
+1. **Skip intro segments**: If a video has a 30-second intro, set `inicio: 30`
+2. **Multiple tracks in one video**: Extract different songs from a concert video by using different start times
+3. **Remove silence**: Skip dead air at the beginning of uploads
+
+**Example from the catalog:**
+
+```javascript js/temas.js
+// Start at 577 seconds (9:37) to skip earlier songs
+{
+  titulo: "Brindaré Por Ti",
+  artista: "Banda Show La Huaranchal",
+  videoId: "JfLWXhriLik",
+  inicio: 577,
+  fuente: "youtube"
+}
+
+// Same video, different start time for another track
+{
+  titulo: "Hay Niveles",
+  artista: "Banda Show La Huaranchal",
+  videoId: "JfLWXhriLik",
+  inicio: 37,
+  fuente: "youtube"
+}
+```
+
+## Source Selection in Admin Panel
+
+The admin form provides a dropdown to select the video source:
+
+```html admin.html
+<div class="field">
+    <label>Fuente</label>
+    <select id="fuente">
+        <option value="youtube">YouTube</option>
+        <option value="drive">Google Drive</option>
+    </select>
+</div>
+```
+
+The selected source affects how the `videoId` field is processed during ID extraction.
+
+## Source-Specific Badges
+
+The admin panel displays visual indicators for each source type:
+
+```css admin.html
+.source-badge.yt {
+    background: rgba(229,9,20,.18);
+    color: #ff6f6f;
+    border-color: rgba(229,9,20,.34);
+}
+
+.source-badge.drive {
+    background: rgba(77,171,247,.16);
+    color: #8ec8ff;
+    border-color: rgba(77,171,247,.32);
+}
+```
+
+In the track table:
+
+```javascript admin.html
+<span class="source-badge ${t.fuente === "youtube" ? "yt" : "drive"}">
+    ${t.fuente || "—"}
+</span>
+```
+
+## Filtering by Source
+
+Filter tracks by their video source using the toolbar:
+
+```javascript admin.html
+<select id="filter-fuente">
+    <option value="all">Todas las fuentes</option>
+    <option value="youtube">YouTube</option>
+    <option value="drive">Google Drive</option>
+</select>
+```
+
+The filter logic:
+
+```javascript admin.html
+const src = refs.filterFuente.value;
+const matchesSrc = src === "all" || (t.fuente || "") === src;
+```
+
+## Statistics by Source
+
+The admin dashboard shows track counts by source:
+
+```javascript admin.html
+function updateStats() {
+    refs.statYt.textContent = allTemas.filter(t => t.fuente === "youtube").length;
+    refs.statDrive.textContent = allTemas.filter(t => t.fuente === "drive").length;
+}
+```
+
+This helps you monitor the distribution of content across platforms.
+
+## Best Practices
+
+### Choosing the Right Source
+
+**Use YouTube when:**
+- Content is publicly available on YouTube
+- You want to leverage YouTube's CDN and reliability
+- The video is from an official artist or public channel
+- You need automatic quality adaptation
+
+**Use Google Drive when:**
+- Content is not available on YouTube
+- You need to host private or exclusive content
+- You have original recordings to share
+- YouTube has copyright restrictions on the content
+
+### Video Quality
+
+- **YouTube**: Automatically adapts quality based on connection speed
+- **Google Drive**: Quality depends on the uploaded file
+
+<Note>
+  For Google Drive videos, upload the highest quality version available. Drive will handle compression and streaming optimization.
+</Note>
+
+### Permissions and Access
+
+**YouTube:**
+- Videos must be public or unlisted
+- Private videos will not embed
+- Age-restricted content may have playback limitations
+
+**Google Drive:**
+- Files must be shared with "Anyone with the link can view"
+- Check permissions: Right-click → Share → Change to "Anyone with the link"
+- Ensure the file is not restricted to specific Google accounts
+
+### Testing Video Sources
+
+Before adding a track to production:
+
+1. **Verify the video ID** is correct by testing the URL manually
+2. **Check playback** in the reproductor page
+3. **Test the start time** to ensure music begins at the right moment
+4. **Confirm permissions** (especially for Drive files)
+
+## Troubleshooting
+
+### YouTube Video Won't Play
+
+**Problem**: Video shows "Video unavailable" error
+
+**Solutions:**
+- Verify the video is public or unlisted
+- Check if the video has been deleted or made private
+- Confirm the video ID is correct
+- Test the video URL directly: `https://youtube.com/watch?v={videoId}`
+
+### Google Drive Video Won't Load
+
+**Problem**: Drive video shows blank player or permission error
+
+**Solutions:**
+- Verify sharing settings: File must be set to "Anyone with the link can view"
+- Check the file ID is correct
+- Ensure the file is a video format (MP4, MOV, etc.)
+- Test the preview URL directly: `https://drive.google.com/file/d/{videoId}/preview`
+
+### Start Time Not Working
+
+**Problem**: Video starts at the beginning despite having `inicio` set
+
+**Solutions:**
+- For YouTube: Verify the start parameter is being passed to the embed URL
+- For Google Drive: Note that Drive may not support start time parameters natively
+- Ensure `inicio` is a valid positive number
+
+### ID Extraction Failing
+
+**Problem**: System doesn't extract ID from pasted URL
+
+**Solutions:**
+- Ensure you've selected the correct **Fuente** (YouTube vs Drive) before pasting
+- Try clicking **"Extraer ID de URL"** manually
+- If extraction fails, manually copy just the ID portion
+- Check the URL format matches supported patterns
+
+## Migration Between Sources
+
+If you need to move content from one source to another:
+
+1. **Upload to new platform** (YouTube or Drive)
+2. **Get the new video ID**
+3. **Edit the track** in the admin panel
+4. **Update the `fuente` field** to the new source
+5. **Update the `videoId` field** with the new ID
+6. **Test playback** before saving
+
+<Warning>
+  Always test the new source before deleting the original. Keep backups of your catalog data.
+</Warning>

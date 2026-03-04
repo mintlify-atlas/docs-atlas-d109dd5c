@@ -1,0 +1,640 @@
+---
+title: Customization
+description: Customize Ripper's appearance, branding, and behavior to match your needs
+---
+
+Ripper is highly customizable with CSS variables, modular styling, and flexible configuration. This guide covers theming, branding, and UI customization.
+
+## Theme Customization
+
+### CSS Variables
+
+Ripper uses CSS custom properties for consistent theming. All color and spacing variables are defined in `:root`:
+
+```css css/estilo.css
+:root {
+    --red:        #e50914;
+    --red-dim:    rgba(229, 9, 20, 0.15);
+    --red-glow:   rgba(229, 9, 20, 0.4);
+    --bg:         #080808;
+    --surface:    #141414;
+    --surface2:   #1c1c1c;
+    --surface3:   #242424;
+    --border:     rgba(255,255,255,0.07);
+    --border2:    rgba(255,255,255,0.12);
+    --text:       #ffffff;
+    --muted:      #a0a0a0;
+    --muted2:     #666;
+    --header-h:   64px;
+    --search-h:   46px;
+    --font-display: 'Bebas Neue', sans-serif;
+    --font-body:    'Outfit', sans-serif;
+}
+```
+
+### Creating Custom Themes
+
+<Steps>
+  <Step title="Define Theme Variables">
+    Create a custom theme by overriding CSS variables:
+    
+    ```css
+    /* Blue Theme */
+    :root {
+        --red: #1e90ff;
+        --red-dim: rgba(30, 144, 255, 0.15);
+        --red-glow: rgba(30, 144, 255, 0.4);
+    }
+    ```
+  </Step>
+
+  <Step title="Update Gradient Colors">
+    Modify gradient definitions to match your theme:
+    
+    ```css
+    .btn-primary {
+        background: linear-gradient(180deg, #4da6ff, #1e90ff);
+    }
+    ```
+  </Step>
+
+  <Step title="Test Across Components">
+    Verify your theme works across all pages:
+    - Landing page (`index.html`)
+    - Home dashboard (`home.html`)
+    - Song list (`lista-temas.html`)
+    - Player interface (`reproductor.html`)
+  </Step>
+</Steps>
+
+### Dark/Light Mode Toggle
+
+Implement a theme switcher by adding alternate color schemes:
+
+```css
+/* Light theme */
+[data-theme="light"] {
+    --bg: #f5f5f5;
+    --surface: #ffffff;
+    --text: #000000;
+    --muted: #666666;
+    --border: rgba(0,0,0,0.1);
+}
+
+/* Dark theme (default) */
+[data-theme="dark"] {
+    --bg: #080808;
+    --surface: #141414;
+    --text: #ffffff;
+    --muted: #a0a0a0;
+    --border: rgba(255,255,255,0.07);
+}
+```
+
+Toggle with JavaScript:
+
+```javascript
+const toggleTheme = () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+};
+```
+
+## Branding Customization
+
+### Logo and Typography
+
+The Ripper logo uses the Bebas Neue font with custom styling:
+
+```css css/estilo.css
+.logo, .rip-logo {
+    font-family: 'Bebas Neue', var(--font-display), sans-serif;
+    font-size: 1.9rem;
+    letter-spacing: 0.22em;
+    color: var(--red);
+    text-shadow: 0 0 28px var(--red-glow), 0 2px 8px rgba(0,0,0,0.8);
+}
+```
+
+<Steps>
+  <Step title="Change Brand Name">
+    Update the logo text in all HTML files:
+    
+    ```html
+    <a href="index.html" class="logo">YOUR BRAND</a>
+    ```
+  </Step>
+
+  <Step title="Customize Typography">
+    Replace default fonts by updating Google Fonts imports:
+    
+    ```html
+    <link href="https://fonts.googleapis.com/css2?family=Your+Font&display=swap" rel="stylesheet">
+    ```
+    
+    Then update CSS variables:
+    
+    ```css
+    :root {
+        --font-display: 'Your Font', sans-serif;
+    }
+    ```
+  </Step>
+
+  <Step title="Add Custom Logo Image">
+    Replace text logo with an image:
+    
+    ```html
+    <a href="index.html" class="logo">
+        <img src="imagenes/your-logo.svg" alt="Brand Name" height="40">
+    </a>
+    ```
+  </Step>
+</Steps>
+
+### Favicon and Metadata
+
+Update branding elements in the `<head>` section:
+
+```html index.html
+<title>Your Brand - Music Streaming</title>
+<link rel="icon" href="imagenes/your-favicon.png" type="image/png">
+<meta name="description" content="Your custom description">
+```
+
+## Background and Hero Customization
+
+### Landing Page Background
+
+The landing page features a dynamic background with overlay effects:
+
+```css index.html
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -3;
+    background:
+        radial-gradient(1000px 500px at 85% 5%, rgba(229,9,20,.2), transparent 60%),
+        linear-gradient(115deg, rgba(0,0,0,.9), rgba(0,0,0,.56) 48%, rgba(0,0,0,.9)),
+        url("https://images.unsplash.com/photo-1440404653325-ab127d49abc1?auto=format&fit=crop&w=2000&q=80") center/cover no-repeat;
+    transform: scale(1.05);
+    animation: slowZoom 22s ease-in-out infinite alternate;
+}
+```
+
+<Steps>
+  <Step title="Change Background Image">
+    Replace the Unsplash URL with your custom image:
+    
+    ```css
+    url("/imagenes/your-background.jpg") center/cover no-repeat
+    ```
+  </Step>
+
+  <Step title="Adjust Gradient Overlay">
+    Modify the radial gradient position and color:
+    
+    ```css
+    radial-gradient(1200px 600px at 50% 50%, rgba(30,144,255,.3), transparent 70%)
+    ```
+  </Step>
+
+  <Step title="Customize Animation">
+    Change zoom animation duration or disable it:
+    
+    ```css
+    /* Slower animation */
+    animation: slowZoom 40s ease-in-out infinite alternate;
+    
+    /* Disable animation */
+    animation: none;
+    ```
+  </Step>
+</Steps>
+
+### Hero Section Content
+
+Customize hero text and call-to-action buttons:
+
+```html index.html
+<div class="hero-left">
+    <h1>Your Custom Title</h1>
+    <p>Your custom description for the music streaming platform.</p>
+    <div class="hero-ctas">
+        <a class="btn btn-primary" href="login.html">
+            <i class="fa-solid fa-play"></i> Get Started
+        </a>
+    </div>
+</div>
+```
+
+## Card Styling and Categories
+
+### Song Card Customization
+
+Song cards use a color-coded system based on musical key:
+
+```css css/estilo.css
+/* Tonality color indicators */
+.card.do-mayor   { border-left: 3px solid #ff6b6b; }
+.card.re-mayor   { border-left: 3px solid #ff922b; }
+.card.mi-mayor   { border-left: 3px solid #ffd43b; }
+.card.fa-mayor   { border-left: 3px solid #26c3c1; }
+.card.sol-mayor  { border-left: 3px solid #4dabf7; }
+.card.la-mayor   { border-left: 3px solid #a78bfa; }
+.card.si-mayor   { border-left: 3px solid #f06595; }
+```
+
+<Note>
+  These colors provide visual differentiation for different musical keys, helping musicians quickly identify songs in their preferred key.
+</Note>
+
+Customize card appearance:
+
+```css
+.card.tema-card {
+    background: linear-gradient(135deg, var(--surface2) 0%, var(--surface) 100%);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    transition: transform 0.22s, box-shadow 0.22s, border-color 0.22s;
+}
+
+.card.tema-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    border-color: var(--border2);
+}
+```
+
+### Category Colors
+
+Add custom categories with unique styling:
+
+```css
+/* Add new tonality */
+.card.custom-key { border-left: 3px solid #your-color; }
+```
+
+Update the data structure in `js/temas.js`:
+
+```javascript
+export const baseDeTemas = {
+    "1": {
+        titulo: "Song Title",
+        artista: "Artist Name",
+        tonalidad: "Custom Key",
+        videoId: "YouTube_ID",
+        inicio: 0,
+        categoria: "huayno",
+        fuente: "youtube"
+    }
+};
+```
+
+## Button Styles
+
+### Primary Buttons
+
+Customize call-to-action buttons:
+
+```css
+.btn-primary {
+    color: #fff;
+    background: linear-gradient(180deg, var(--red-2), var(--red));
+    box-shadow: 0 14px 35px rgba(229,9,20,.35);
+    transition: filter .2s ease, transform .06s ease;
+}
+
+.btn-primary:hover {
+    filter: brightness(1.08);
+}
+
+.btn-primary:active {
+    transform: translateY(1px);
+}
+```
+
+### Navigation Buttons
+
+Style header navigation elements:
+
+```css css/estilo.css
+.btn-nav, .btn-header {
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: rgba(255,255,255,0.04);
+    color: var(--muted);
+}
+
+.btn-nav:hover {
+    color: white;
+    border-color: var(--border2);
+    background: rgba(255,255,255,0.08);
+}
+```
+
+### Specialized Buttons
+
+Admin and logout button variants:
+
+```css css/estilo.css
+.btn-logout {
+    background: rgba(229,9,20,0.1);
+    border-color: rgba(229,9,20,0.3);
+    color: rgba(255,100,100,0.9);
+}
+
+.btn-admin {
+    background: rgba(255,200,0,0.08);
+    border-color: rgba(255,200,0,0.25);
+    color: rgba(255,200,80,0.9);
+}
+```
+
+## Layout Customization
+
+### Header Configuration
+
+Adjust header height and positioning:
+
+```css css/estilo.css
+:root {
+    --header-h: 64px;  /* Desktop header height */
+}
+
+.site-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--header-h);
+    z-index: 2000;
+    background: linear-gradient(180deg, rgba(0,0,0,0.96) 0%, rgba(0,0,0,0.5) 100%);
+    backdrop-filter: blur(12px);
+}
+```
+
+### Grid Layout
+
+Customize the song grid layout:
+
+```css css/estilo.css
+.grid-huaynos {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+    gap: 12px;
+}
+
+/* Responsive adjustments */
+@media (min-width: 900px) {
+    .grid-huaynos {
+        grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+        gap: 14px;
+    }
+}
+```
+
+### Carousel Configuration
+
+Adjust carousel card sizing:
+
+```css css/estilo.css
+.row-cards {
+    display: flex;
+    gap: 14px;
+    overflow-x: hidden;
+    padding: 8px 0;
+}
+
+.row-cards .card {
+    min-width: 320px;  /* Adjust card width */
+    flex: 0 0 auto;
+}
+```
+
+## Animation Customization
+
+### Background Animations
+
+```css
+@keyframes slowZoom {
+    from { transform: scale(1.05); }
+    to { transform: scale(1.1); }
+}
+
+/* Apply to background */
+animation: slowZoom 22s ease-in-out infinite alternate;
+```
+
+### Hover Animations
+
+Customize card hover effects:
+
+```css
+.card.tema-card:hover {
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    transition-duration: 0.3s;
+}
+```
+
+### Button Animations
+
+Add shimmer effect to login button:
+
+```css index.html
+.btn-login::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -30%;
+    width: 30%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.3), transparent);
+    transform: skewX(-20deg);
+    transition: left .5s ease;
+}
+
+.btn-login:hover::before {
+    left: 120%;
+}
+```
+
+## Responsive Design
+
+### Mobile Breakpoints
+
+Ripper includes responsive breakpoints for different screen sizes:
+
+```css css/estilo.css
+/* Tablet and mobile */
+@media (max-width: 900px) {
+    .carousel-btn { display: none; }
+    .scroll-fade { display: block; }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+    :root {
+        --header-h: 56px;
+        --search-h: 44px;
+    }
+    
+    .hero-content {
+        flex-direction: column;
+    }
+    
+    .login-panel {
+        display: none !important;
+    }
+}
+
+/* Small mobile */
+@media (max-width: 480px) {
+    .btn-nav span {
+        display: none;  /* Icon-only buttons */
+    }
+    
+    .grid-huaynos {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+```
+
+## Visual Effects
+
+### Grain Overlay
+
+Add texture to the interface:
+
+```css css/estilo.css
+body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.35;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
+}
+```
+
+### Backdrop Blur
+
+Create frosted glass effects:
+
+```css
+.login-panel {
+    background: rgba(14,14,14,0.82);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--border);
+}
+```
+
+### Glow Effects
+
+Add glowing elements:
+
+```css
+.logo {
+    text-shadow: 0 0 28px var(--red-glow), 0 2px 8px rgba(0,0,0,0.8);
+}
+
+.btn-primary {
+    box-shadow: 0 14px 35px rgba(229,9,20,.35);
+}
+```
+
+## WhatsApp Integration
+
+Customize the WhatsApp contact button:
+
+```html index.html
+<a href="https://wa.me/YOUR_NUMBER" target="_blank" class="btn-whatsapp">
+    <i class="fab fa-whatsapp"></i> Contact Us
+</a>
+```
+
+Style the button:
+
+```css index.html
+.btn-whatsapp {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: #fff;
+    background: var(--ok);  /* #25D366 */
+    border-radius: 999px;
+    padding: 10px 16px;
+    font-weight: 700;
+    box-shadow: 0 10px 24px rgba(37,211,102,.3);
+}
+```
+
+## Configuration Files
+
+### Music Database
+
+Customize the song database in `js/temas.js`:
+
+```javascript js/temas.js
+export const baseDeTemas = {
+    "1": {
+        titulo: "Song Title",
+        artista: "Artist Name",
+        tonalidad: "La menor",
+        videoId: "YouTube_Video_ID",
+        inicio: 29,  // Start time in seconds
+        categoria: "huayno",
+        fuente: "youtube"  // or "drive" for Google Drive
+    }
+};
+```
+
+### Admin Configuration
+
+Update admin credentials in page scripts:
+
+```javascript home.html
+const ADMIN_EMAIL = "admin@yourdomain.com";
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use CSS Variables">
+    Always use CSS custom properties for colors and spacing to maintain consistency and enable easy theme switching.
+  </Accordion>
+
+  <Accordion title="Test Responsive Design">
+    Test customizations across all breakpoints (mobile, tablet, desktop) to ensure a consistent experience.
+  </Accordion>
+
+  <Accordion title="Optimize Images">
+    Compress background images and use appropriate formats (WebP for photos, SVG for logos) to maintain performance.
+  </Accordion>
+
+  <Accordion title="Maintain Accessibility">
+    Ensure sufficient color contrast (minimum 4.5:1 for text) and test with screen readers when changing UI elements.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Deployment" icon="rocket" href="/technical/deployment">
+    Deploy your customized Ripper instance
+  </Card>
+  
+  <Card title="Firebase Setup" icon="fire" href="/technical/firebase-setup">
+    Understand the technical architecture
+  </Card>
+</CardGroup>

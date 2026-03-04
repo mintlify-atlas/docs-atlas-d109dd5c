@@ -1,0 +1,390 @@
+---
+title: Deployment
+description: Deploy Ripper to production using GitHub Pages or other hosting platforms
+---
+
+Ripper is designed to be deployed as a static web application. This guide covers deployment strategies, CI/CD configuration, and hosting options.
+
+## GitHub Pages Deployment
+
+Ripper includes a pre-configured GitHub Actions workflow for automatic deployment to GitHub Pages.
+
+### Automatic Deployment
+
+The project uses GitHub Actions for continuous deployment. Every push to the `main` branch automatically triggers a deployment.
+
+<Steps>
+  <Step title="Enable GitHub Pages">
+    Navigate to your repository settings and enable GitHub Pages:
+    
+    1. Go to **Settings** > **Pages**
+    2. Under **Source**, select **GitHub Actions**
+    3. Save your settings
+  </Step>
+
+  <Step title="Configure Workflow Permissions">
+    Ensure the workflow has the necessary permissions:
+    
+    1. Go to **Settings** > **Actions** > **General**
+    2. Under **Workflow permissions**, select **Read and write permissions**
+    3. Enable **Allow GitHub Actions to create and approve pull requests**
+  </Step>
+
+  <Step title="Push to Main Branch">
+    Push your changes to the `main` branch:
+    
+    ```bash
+    git add .
+    git commit -m "Deploy to GitHub Pages"
+    git push origin main
+    ```
+  </Step>
+
+  <Step title="Monitor Deployment">
+    Check the deployment status:
+    
+    1. Go to the **Actions** tab in your repository
+    2. View the running workflow
+    3. Once complete, your site will be live at `https://<username>.github.io/<repository>`
+  </Step>
+</Steps>
+
+### Deployment Workflow
+
+The deployment configuration is located at `.github/workflows/deploy.yml`:
+
+```yaml .github/workflows/deploy.yml
+name: Deploy Ripper
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+```
+
+<Note>
+  The `workflow_dispatch` trigger allows you to manually trigger deployments from the Actions tab.
+</Note>
+
+## Manual Deployment
+
+You can manually trigger a deployment without pushing to the main branch:
+
+<Steps>
+  <Step title="Navigate to Actions">
+    Go to the **Actions** tab in your GitHub repository
+  </Step>
+
+  <Step title="Select Workflow">
+    Click on **Deploy Ripper** from the workflows list
+  </Step>
+
+  <Step title="Run Workflow">
+    Click **Run workflow** > Select `main` branch > Click **Run workflow**
+  </Step>
+</Steps>
+
+## Alternative Hosting Options
+
+### Netlify
+
+Deploy Ripper to Netlify with zero configuration:
+
+<Steps>
+  <Step title="Connect Repository">
+    1. Log in to [Netlify](https://netlify.com)
+    2. Click **Add new site** > **Import an existing project**
+    3. Connect your GitHub repository
+  </Step>
+
+  <Step title="Configure Build Settings">
+    Use these settings:
+    
+    - **Build command**: Leave empty (static site)
+    - **Publish directory**: `.` (root directory)
+  </Step>
+
+  <Step title="Deploy">
+    Click **Deploy site** - your site will be live in minutes
+  </Step>
+</Steps>
+
+### Vercel
+
+Deploy to Vercel for edge-optimized hosting:
+
+```bash
+npm install -g vercel
+vercel
+```
+
+Follow the prompts to deploy your application.
+
+### Cloudflare Pages
+
+<Steps>
+  <Step title="Connect Repository">
+    1. Go to [Cloudflare Pages](https://pages.cloudflare.com)
+    2. Click **Create a project**
+    3. Connect your GitHub repository
+  </Step>
+
+  <Step title="Configure Build">
+    - **Framework preset**: None
+    - **Build command**: (leave empty)
+    - **Build output directory**: `/`
+  </Step>
+
+  <Step title="Deploy">
+    Click **Save and Deploy**
+  </Step>
+</Steps>
+
+## Firebase Hosting
+
+For integration with Firebase services, deploy using Firebase Hosting:
+
+<Steps>
+  <Step title="Install Firebase CLI">
+    ```bash
+    npm install -g firebase-tools
+    ```
+  </Step>
+
+  <Step title="Login and Initialize">
+    ```bash
+    firebase login
+    firebase init hosting
+    ```
+    
+    Configure:
+    - Public directory: `.`
+    - Single-page app: `Yes`
+    - Overwrite files: `No`
+  </Step>
+
+  <Step title="Deploy">
+    ```bash
+    firebase deploy --only hosting
+    ```
+  </Step>
+</Steps>
+
+## Environment Configuration
+
+### Firebase Configuration
+
+Update Firebase credentials in `firebase.js` for your environment:
+
+```javascript firebase.js
+const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "your-project.firebaseapp.com",
+    projectId: "your-project-id",
+    storageBucket: "your-project.firebasestorage.app",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+};
+```
+
+<Warning>
+  Never commit real API keys to public repositories. Use environment-specific configuration files or secrets management.
+</Warning>
+
+### Production Checklist
+
+Before deploying to production:
+
+- [ ] Update Firebase configuration with production credentials
+- [ ] Configure Firestore security rules
+- [ ] Set up Firebase Authentication providers
+- [ ] Test all authentication flows
+- [ ] Verify video sources are accessible
+- [ ] Configure custom domain (if applicable)
+- [ ] Enable HTTPS (automatic with most hosting providers)
+- [ ] Set up monitoring and error tracking
+- [ ] Configure CSP headers for security
+
+## Custom Domain
+
+### GitHub Pages Custom Domain
+
+<Steps>
+  <Step title="Add CNAME File">
+    Create a `CNAME` file in the root directory:
+    
+    ```text CNAME
+    ripper.yourdomain.com
+    ```
+  </Step>
+
+  <Step title="Configure DNS">
+    Add DNS records at your domain provider:
+    
+    | Type | Name | Value |
+    |------|------|-------|
+    | CNAME | ripper | `<username>.github.io` |
+  </Step>
+
+  <Step title="Enforce HTTPS">
+    1. Go to repository **Settings** > **Pages**
+    2. Check **Enforce HTTPS**
+  </Step>
+</Steps>
+
+## Monitoring Deployments
+
+### Deployment Status
+
+Monitor deployment status in the Actions tab:
+
+- **Green checkmark**: Successful deployment
+- **Red X**: Failed deployment - check logs for errors
+- **Yellow circle**: Deployment in progress
+
+### Troubleshooting Failed Deployments
+
+<AccordionGroup>
+  <Accordion title="Permission Denied Errors">
+    Ensure workflow permissions are set correctly:
+    
+    1. Go to **Settings** > **Actions** > **General**
+    2. Enable **Read and write permissions**
+    3. Re-run the workflow
+  </Accordion>
+
+  <Accordion title="Build Artifacts Not Found">
+    Check the `path` configuration in `upload-pages-artifact`:
+    
+    ```yaml
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      with:
+        path: '.'  # Should point to your build output
+    ```
+  </Accordion>
+
+  <Accordion title="404 Page Not Found">
+    Ensure your repository is public or GitHub Pages is enabled for private repositories with GitHub Pro.
+  </Accordion>
+</AccordionGroup>
+
+## Rollback Strategy
+
+To rollback to a previous deployment:
+
+<Steps>
+  <Step title="Identify Previous Commit">
+    ```bash
+    git log --oneline
+    ```
+  </Step>
+
+  <Step title="Revert to Previous Version">
+    ```bash
+    git revert HEAD
+    git push origin main
+    ```
+    
+    Or reset to a specific commit:
+    
+    ```bash
+    git reset --hard <commit-hash>
+    git push --force origin main
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  Use `git push --force` with caution as it rewrites history.
+</Warning>
+
+## Performance Optimization
+
+### Caching Strategy
+
+Ripper uses IndexedDB persistence for Firebase data:
+
+```javascript firebase.js
+enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code == 'failed-precondition') {
+        console.warn("Persistence failed: Multiple tabs open.");
+    } else if (err.code == 'unimplemented') {
+        console.warn("Browser doesn't support persistence.");
+    }
+});
+```
+
+This ensures instant load times after the first visit.
+
+### CDN Recommendations
+
+For better global performance:
+
+- **Cloudflare**: Automatic CDN with Pages deployment
+- **Netlify**: Built-in global CDN
+- **Vercel**: Edge network deployment
+
+## Security Considerations
+
+### Firestore Security Rules
+
+Implement proper security rules for production:
+
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /usuarios/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
+```
+
+### Content Security Policy
+
+Add CSP headers to your hosting configuration for enhanced security:
+
+```text
+Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.googleapis.com;
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Customization" icon="palette" href="/technical/customization">
+    Customize themes, branding, and UI components
+  </Card>
+  
+  <Card title="Firebase Setup" icon="fire" href="/technical/firebase-setup">
+    Learn about Ripper's technical architecture
+  </Card>
+</CardGroup>

@@ -1,0 +1,576 @@
+---
+title: "Admin Panel"
+description: "Complete content management system for adding, editing, and organizing the music catalog"
+---
+
+The admin panel (`admin.html`) provides a comprehensive interface for managing the entire music catalog, including adding new songs, editing metadata, and bulk operations.
+
+## Access Control
+
+The admin panel is restricted to a single authorized email address.
+
+### Authentication Check
+
+From `admin.html:933-940`:
+
+```javascript
+const ADMIN_EMAIL = "admin@ripper.com";
+
+onAuthStateChanged(auth, user => {
+    if (user && user.email === ADMIN_EMAIL) {
+        cargarTemas();
+    } else {
+        alert("Acceso denegado.");
+        window.location.href = "home.html";
+    }
+});
+```
+
+<Warning>
+  Only users authenticated with `admin@ripper.com` can access the admin panel. All other users are immediately redirected to the home page.
+</Warning>
+
+## Dashboard Statistics
+
+The dashboard displays real-time statistics about the catalog (`admin.html:451-456`):
+
+```html
+<div class="stats-grid">
+    <div class="stat"><div class="stat-label">Total temas</div><div class="stat-value" id="stat-total">0</div></div>
+    <div class="stat"><div class="stat-label">YouTube</div><div class="stat-value" id="stat-yt">0</div></div>
+    <div class="stat"><div class="stat-label">Drive</div><div class="stat-value" id="stat-drive">0</div></div>
+    <div class="stat"><div class="stat-label">Categorías</div><div class="stat-value" id="stat-cats">0</div></div>
+</div>
+```
+
+Statistics are calculated from `admin.html:658-663`:
+
+```javascript
+function updateStats() {
+    refs.statTotal.textContent = allTemas.length;
+    refs.statYt.textContent = allTemas.filter(t => t.fuente === "youtube").length;
+    refs.statDrive.textContent = allTemas.filter(t => t.fuente === "drive").length;
+    refs.statCats.textContent = new Set(allTemas.map(t => t.categoria || "sin")).size;
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Total Temas" icon="music">
+    Complete count of all songs in database
+  </Card>
+  <Card title="YouTube" icon="youtube">
+    Number of YouTube-sourced videos
+  </Card>
+  <Card title="Drive" icon="google-drive">
+    Number of Google Drive videos
+  </Card>
+  <Card title="Categorías" icon="tags">
+    Count of unique categories in use
+  </Card>
+</CardGroup>
+
+## Add/Edit Form
+
+The form handles both creating new songs and editing existing ones.
+
+### Form Fields
+
+From `admin.html:467-488`:
+
+```html
+<div class="form-grid">
+    <div class="field"><label>Título</label><input type="text" id="titulo" placeholder="Nombre del tema"></div>
+    <div class="field"><label>Artista</label><input type="text" id="artista" placeholder="Banda o artista"></div>
+    <div class="field"><label>Tonalidad</label><input type="text" id="tonalidad" placeholder="ej: La menor"></div>
+    <div class="field"><label>Segundo de inicio</label><input type="number" id="inicio" placeholder="0" min="0"></div>
+    <div class="field full"><label>ID o URL del video</label><input type="text" id="videoId" placeholder="ID de YouTube o Google Drive (o pega URL)"></div>
+    <div class="field">
+        <label>Categoría</label>
+        <select id="categoria">
+            <option value="huayno">Huayno</option>
+            <option value="salay">Salay</option>
+            <option value="cumbia">Cumbia</option>
+        </select>
+    </div>
+    <div class="field">
+        <label>Fuente</label>
+        <select id="fuente">
+            <option value="youtube">YouTube</option>
+            <option value="drive">Google Drive</option>
+        </select>
+    </div>
+</div>
+```
+
+### Data Collection
+
+From `admin.html:609-619`:
+
+```javascript
+function collectData() {
+    return {
+        titulo: refs.titulo.value.trim(),
+        artista: refs.artista.value.trim(),
+        tonalidad: refs.tonalidad.value.trim(),
+        videoId: refs.videoId.value.trim(),
+        inicio: parseInt(refs.inicio.value, 10) || 0,
+        categoria: refs.categoria.value,
+        fuente: refs.fuente.value
+    };
+}
+```
+
+### Validation
+
+From `admin.html:621-626`:
+
+```javascript
+function validateData(data) {
+    if (!data.titulo) return "El título es obligatorio.";
+    if (!data.videoId) return "El ID/URL del video es obligatorio.";
+    if (data.inicio < 0) return "El segundo de inicio no puede ser negativo.";
+    return "";
+}
+```
+
+## Video ID Extraction
+
+The system automatically extracts video IDs from full URLs.
+
+### Auto-Extract Button
+
+From `admin.html:905-912`:
+
+```javascript
+document.getElementById("btnAutoId").onclick = () => {
+    if (!refs.videoId.value.trim()) {
+        showStatus("Pega primero un ID o URL en el campo de video.", false);
+        return;
+    }
+    refs.videoId.value = extractVideoId(refs.videoId.value, refs.fuente.value);
+    showStatus("✓ ID extraído.", true);
+};
+```
+
+### Extraction Logic
+
+From `admin.html:725-747`:
+
+```javascript
+function extractVideoId(raw, fuente) {
+    const value = (raw || "").trim();
+    if (!value) return "";
+    if (!value.includes("http")) return value;
+
+    try {
+        const url = new URL(value);
+        if (fuente === "youtube") {
+            if (url.hostname.includes("youtu.be")) return url.pathname.replace("/", "");
+            const v = url.searchParams.get("v");
+            if (v) return v;
+            const segments = url.pathname.split("/").filter(Boolean);
+            return segments[segments.length - 1] || value;
+        }
+        if (fuente === "drive") {
+            const match = value.match(/\/d\/([^/]+)/);
+            if (match && match[1]) return match[1];
+            const idParam = url.searchParams.get("id");
+            if (idParam) return idParam;
+        }
+    } catch {}
+    return value;
+}
+```
+
+Supported URL formats:
+
+**YouTube:**
+- `https://www.youtube.com/watch?v=VIDEO_ID`
+- `https://youtu.be/VIDEO_ID`
+- `https://www.youtube.com/embed/VIDEO_ID`
+
+**Google Drive:**
+- `https://drive.google.com/file/d/FILE_ID/view`
+- `https://drive.google.com/open?id=FILE_ID`
+
+<Tip>
+  The system also auto-extracts IDs when you blur the videoId field, saving you from clicking the "Extract" button manually.
+</Tip>
+
+## Save Operations
+
+### Create New Song
+
+From `admin.html:749-792`:
+
+```javascript
+async function guardarTema() {
+    const editId = refs.editId.value;
+    const data = collectData();
+    data.videoId = extractVideoId(data.videoId, data.fuente);
+
+    const err = validateData(data);
+    if (err) {
+        showStatus(err, false);
+        return;
+    }
+
+    refs.btnGuardar.disabled = true;
+    refs.btnGuardar.textContent = editId ? "Actualizando..." : "Guardando...";
+
+    try {
+        if (editId) {
+            await updateDoc(doc(db, "temas", editId), data);
+            const idx = allTemas.findIndex(t => t._id === editId);
+            if (idx > -1) allTemas[idx] = { ...allTemas[idx], ...data };
+            showStatus("✓ Tema actualizado.", true);
+        } else {
+            const payload = { ...data, createdAt: serverTimestamp() };
+            const ref = await addDoc(collection(db, "temas"), payload);
+            allTemas.push({ _id: ref.id, ...data, createdAtMs: Date.now() });
+            showStatus("✓ Tema añadido.", true);
+        }
+
+        limpiar();
+        updateStats();
+        applyFiltersAndRender();
+    } catch (e) {
+        console.error(e);
+        showStatus("Error: " + e.message, false);
+    } finally {
+        refs.btnGuardar.disabled = false;
+        // ... restore button text
+    }
+}
+```
+
+<Note>
+  New songs automatically receive a `createdAt` timestamp using Firestore's `serverTimestamp()` for accurate sorting.
+</Note>
+
+## Table View
+
+The table displays all songs with inline actions.
+
+### Table Structure
+
+From `admin.html:531-544`:
+
+```html
+<table class="tabla-admin">
+    <thead>
+        <tr>
+            <th>Título</th>
+            <th>Artista</th>
+            <th>Tonalidad</th>
+            <th>Categoría</th>
+            <th>Fuente</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody id="tabla-body"></tbody>
+</table>
+```
+
+### Row Rendering
+
+From `admin.html:665-691`:
+
+```javascript
+function renderTabla(lista) {
+    refs.tableCount.textContent = `${lista.length} tema${lista.length !== 1 ? "s" : ""}`;
+    if (!lista.length) {
+        refs.tbody.innerHTML = `<tr class="empty-row"><td colspan="6">Sin resultados</td></tr>`;
+        refs.lastUpdate.textContent = `Actualizado ${fmtNow()}`;
+        return;
+    }
+
+    refs.tbody.innerHTML = lista.map(t => `
+        <tr>
+            <td>${t.titulo || "—"}</td>
+            <td>${t.artista || "—"}</td>
+            <td>${t.tonalidad || "—"}</td>
+            <td><span class="cat-badge">${t.categoria || "—"}</span></td>
+            <td><span class="source-badge ${t.fuente === "youtube" ? "yt" : "drive"}">${t.fuente || "—"}</span></td>
+            <td>
+                <div class="row-actions">
+                    <button class="btn-edit-row" onclick="prepEdit('${t._id}')">Editar</button>
+                    <button class="btn-dup-row" onclick="duplicar('${t._id}')">Duplicar</button>
+                    <button class="btn-copy-row" onclick="copiarLink('${t._id}','${t.categoria || "huayno"}')">Link</button>
+                    <button class="btn-del-row" onclick="borrar('${t._id}')">Eliminar</button>
+                </div>
+            </td>
+        </tr>`).join("");
+
+    refs.lastUpdate.textContent = `Actualizado ${fmtNow()}`;
+}
+```
+
+## Filtering and Sorting
+
+### Filter Controls
+
+From `admin.html:507-527`:
+
+```html
+<div class="table-toolbar">
+    <input type="text" id="search-admin" placeholder="🔎 Buscar título, artista o tonalidad...">
+    <select id="filter-categoria">
+        <option value="all">Todas las categorías</option>
+        <option value="huayno">Huayno</option>
+        <option value="salay">Salay</option>
+        <option value="cumbia">Cumbia</option>
+    </select>
+    <select id="filter-fuente">
+        <option value="all">Todas las fuentes</option>
+        <option value="youtube">YouTube</option>
+        <option value="drive">Google Drive</option>
+    </select>
+    <select id="sort-admin">
+        <option value="titulo-asc">Título A-Z</option>
+        <option value="titulo-desc">Título Z-A</option>
+        <option value="artista-asc">Artista A-Z</option>
+        <option value="reciente">Más recientes</option>
+    </select>
+    <button id="btnResetFilters" class="btn-filter" type="button">Limpiar</button>
+</div>
+```
+
+### Filter Implementation
+
+From `admin.html:628-656`:
+
+```javascript
+function applyFiltersAndRender() {
+    const q = normalizar(refs.search.value);
+    const cat = refs.filterCategoria.value;
+    const src = refs.filterFuente.value;
+    const sortMode = refs.sort.value;
+
+    filteredTemas = allTemas.filter(t => {
+        const matchesText = normalizar(t.titulo).includes(q)
+            || normalizar(t.artista).includes(q)
+            || normalizar(t.tonalidad).includes(q);
+        const matchesCat = cat === "all" || (t.categoria || "") === cat;
+        const matchesSrc = src === "all" || (t.fuente || "") === src;
+        return matchesText && matchesCat && matchesSrc;
+    });
+
+    filteredTemas.sort((a, b) => {
+        const ta = (a.titulo || "").toLowerCase();
+        const tb = (b.titulo || "").toLowerCase();
+        const aa = (a.artista || "").toLowerCase();
+        const ab = (b.artista || "").toLowerCase();
+
+        if (sortMode === "titulo-asc") return ta.localeCompare(tb);
+        if (sortMode === "titulo-desc") return tb.localeCompare(ta);
+        if (sortMode === "artista-asc") return aa.localeCompare(ab);
+        return (b.createdAtMs || 0) - (a.createdAtMs || 0);
+    });
+
+    renderTabla(filteredTemas);
+}
+```
+
+## Row Actions
+
+### Edit
+
+From `admin.html:794-813`:
+
+```javascript
+window.prepEdit = (id) => {
+    const t = allTemas.find(x => x._id === id);
+    if (!t) return;
+
+    refs.editId.value = id;
+    refs.titulo.value = t.titulo || "";
+    refs.artista.value = t.artista || "";
+    refs.tonalidad.value = t.tonalidad || "";
+    refs.videoId.value = t.videoId || "";
+    refs.inicio.value = t.inicio || 0;
+    refs.categoria.value = t.categoria || "huayno";
+    refs.fuente.value = t.fuente || "youtube";
+
+    refs.formLabel.textContent = "✏️ Editando tema";
+    refs.btnGuardar.innerHTML = `
+        <svg>...</svg>
+        Actualizar cambios`;
+    refs.btnCancelar.style.display = "inline-flex";
+    window.scrollTo({ top: 0, behavior: "smooth" });
+};
+```
+
+### Duplicate
+
+From `admin.html:815-838`:
+
+```javascript
+window.duplicar = async (id) => {
+    const t = allTemas.find(x => x._id === id);
+    if (!t) return;
+    const copia = {
+        titulo: `${t.titulo || "Tema"} (copia)`,
+        artista: t.artista || "",
+        tonalidad: t.tonalidad || "",
+        videoId: t.videoId || "",
+        inicio: t.inicio || 0,
+        categoria: t.categoria || "huayno",
+        fuente: t.fuente || "youtube",
+        createdAt: serverTimestamp()
+    };
+
+    try {
+        const ref = await addDoc(collection(db, "temas"), copia);
+        allTemas.unshift({ _id: ref.id, ...copia, createdAtMs: Date.now() });
+        updateStats();
+        applyFiltersAndRender();
+        showStatus("✓ Tema duplicado.", true);
+    } catch (e) {
+        showStatus("Error al duplicar: " + e.message, false);
+    }
+};
+```
+
+<Tip>
+  Duplicating adds "(copia)" to the title to prevent confusion with the original.
+</Tip>
+
+### Copy Link
+
+From `admin.html:840-848`:
+
+```javascript
+window.copiarLink = async (id, cat) => {
+    const url = `${location.origin}${location.pathname.replace("admin.html", "reproductor.html")}?id=${id}&cat=${cat || "huayno"}`;
+    try {
+        await navigator.clipboard.writeText(url);
+        showStatus("✓ Link copiado.", true);
+    } catch {
+        showStatus("No se pudo copiar el link.", false);
+    }
+};
+```
+
+### Delete
+
+From `admin.html:850-862`:
+
+```javascript
+window.borrar = async (id) => {
+    const t = allTemas.find(x => x._id === id);
+    if (!confirm(`¿Eliminar "${t?.titulo || "tema"}"?`)) return;
+    try {
+        await deleteDoc(doc(db, "temas", id));
+        allTemas = allTemas.filter(x => x._id !== id);
+        updateStats();
+        applyFiltersAndRender();
+        showStatus("✓ Eliminado.", true);
+    } catch (e) {
+        showStatus("Error al eliminar: " + e.message, false);
+    }
+};
+```
+
+<Warning>
+  Delete operations show a confirmation dialog and are permanent. There is no undo functionality.
+</Warning>
+
+## CSV Export
+
+Export the current filtered view or entire catalog to CSV.
+
+From `admin.html:864-885`:
+
+```javascript
+function exportCsv() {
+    const rows = filteredTemas.length ? filteredTemas : allTemas;
+    if (!rows.length) {
+        showStatus("No hay datos para exportar.", false);
+        return;
+    }
+
+    const headers = ["titulo", "artista", "tonalidad", "categoria", "fuente", "videoId", "inicio"];
+    const escapeCell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = [headers.join(",")]
+        .concat(rows.map(r => headers.map(h => escapeCell(r[h])).join(",")))
+        .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ripper-temas-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showStatus("✓ CSV exportado.", true);
+}
+```
+
+Exported fields:
+- titulo
+- artista
+- tonalidad
+- categoria
+- fuente
+- videoId
+- inicio
+
+## Keyboard Shortcuts
+
+From `admin.html:919-931`:
+
+```javascript
+document.addEventListener("keydown", (e) => {
+    const activeTag = (document.activeElement?.tagName || "").toLowerCase();
+    if (e.key === "Escape") {
+        limpiar();
+    }
+    if (e.key === "Enter" && activeTag !== "textarea" && activeTag !== "button") {
+        const isFormField = ["input", "select"].includes(activeTag);
+        if (isFormField) {
+            e.preventDefault();
+            guardarTema();
+        }
+    }
+});
+```
+
+| Shortcut | Action |
+|----------|--------|
+| **Enter** | Save form (when focused on input/select) |
+| **Esc** | Cancel edit and clear form |
+
+## Status Messages
+
+From `admin.html:602-607`:
+
+```javascript
+function showStatus(msg, ok) {
+    refs.status.textContent = msg;
+    refs.status.className = ok ? "ok" : "err";
+    refs.status.style.display = "inline-block";
+    setTimeout(() => { refs.status.style.display = "none"; }, 3200);
+}
+```
+
+Status messages appear for:
+- ✓ Successful saves
+- ✓ Duplications
+- ✓ Deletions
+- ✓ ID extraction
+- ✗ Validation errors
+- ✗ Network errors
+
+Messages auto-dismiss after 3.2 seconds.
+
+## Related
+
+<CardGroup cols={2}>
+  <Card title="Catalog Browsing" icon="list" href="/features/catalog-browsing">
+    See how users browse the catalog
+  </Card>
+  <Card title="Session Management" icon="shield" href="/features/session-management">
+    Understand admin authentication
+  </Card>
+</CardGroup>
